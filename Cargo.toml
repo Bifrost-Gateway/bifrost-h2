@@ -30,14 +30,6 @@ stream = []
 # depends on this feature.
 unstable = []
 
-[workspace]
-members = [
-    "tests/h2-fuzz",
-    "tests/h2-tests",
-    "tests/h2-support",
-    "util/genfixture",
-    "util/genhuff",
-]
 
 [dependencies]
 futures-core = { version = "0.3", default-features = false }
