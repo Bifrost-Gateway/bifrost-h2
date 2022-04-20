@@ -319,7 +319,15 @@ fn decode_frame(
         }
         #[cfg(feature = "bifrost-protocol")]
         Kind::BifrostCall => {
-            return Ok(None);
+            let _ = bytes.split_to(frame::HEADER_LEN);
+            let res = frame::BifrostCall::load(head, bytes.freeze());
+
+            // TODO: Should this always be connection level? Probably not...
+            res.map_err(|e| {
+                proto_err!(conn: "failed to load DATA frame; err={:?}", e);
+                Error::library_go_away(Reason::PROTOCOL_ERROR)
+            })?
+                .into()
         }
         #[cfg(feature = "bifrost-protocol")]
         Kind::BifrostAnswer => {

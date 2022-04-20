@@ -37,7 +37,10 @@ mod settings;
 mod stream_id;
 mod util;
 mod window_update;
-
+#[cfg(feature = "bifrost-protocol")]
+mod bifrost;
+#[cfg(feature = "bifrost-protocol")]
+pub use self::bifrost::BifrostCall;
 pub use self::data::Data;
 pub use self::go_away::GoAway;
 pub use self::head::{Head, Kind};
@@ -68,6 +71,8 @@ pub const HEADER_LEN: usize = 9;
 
 #[derive(Eq, PartialEq)]
 pub enum Frame<T = Bytes> {
+    #[cfg(feature = "bifrost-protocol")]
+    BifrostCall(BifrostCall<T>),
     Data(Data<T>),
     Headers(Headers),
     Priority(Priority),
@@ -81,8 +86,8 @@ pub enum Frame<T = Bytes> {
 
 impl<T> Frame<T> {
     pub fn map<F, U>(self, f: F) -> Frame<U>
-    where
-        F: FnOnce(T) -> U,
+        where
+            F: FnOnce(T) -> U,
     {
         use self::Frame::*;
 

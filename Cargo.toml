@@ -64,4 +64,4 @@ tokio-rustls = "0.23.2"
 webpki-roots = "0.22.2"
 
 [package.metadata.docs.rs]
-features = ["stream"]
+features = ["stream","bifrost-protocol"]
