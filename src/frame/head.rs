@@ -22,6 +22,10 @@ pub enum Kind {
     GoAway = 7,
     WindowUpdate = 8,
     Continuation = 9,
+    #[cfg(feature = "bifrost-protocol")]
+    BifrostCall = 10,
+    #[cfg(feature = "bifrost-protocol")]
+    BifrostAnswer = 11,
     Unknown,
 }
 
@@ -88,6 +92,10 @@ impl Kind {
             7 => Kind::GoAway,
             8 => Kind::WindowUpdate,
             9 => Kind::Continuation,
+            #[cfg(feature = "bifrost-protocol")]
+            10 => Kind::BifrostCall,
+            #[cfg(feature = "bifrost-protocol")]
+            11 => Kind::BifrostAnswer,
             _ => Kind::Unknown,
         }
     }

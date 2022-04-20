@@ -23,6 +23,7 @@ edition = "2018"
 [features]
 # Enables `futures::Stream` implementations for various types.
 stream = []
+bifrost-protocol = []
 
 # Enables **unstable** APIs. Any API exposed by this feature has no backwards
 # compatibility guarantees. In other words, you should not use this feature for

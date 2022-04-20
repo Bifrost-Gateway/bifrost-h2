@@ -178,7 +178,7 @@ fn decode_frame(
                 proto_err!(conn: "failed to load SETTINGS frame; err={:?}", e);
                 Error::library_go_away(Reason::PROTOCOL_ERROR)
             })?
-            .into()
+                .into()
         }
         Kind::Ping => {
             let res = frame::Ping::load(head, &bytes[frame::HEADER_LEN..]);
@@ -187,7 +187,7 @@ fn decode_frame(
                 proto_err!(conn: "failed to load PING frame; err={:?}", e);
                 Error::library_go_away(Reason::PROTOCOL_ERROR)
             })?
-            .into()
+                .into()
         }
         Kind::WindowUpdate => {
             let res = frame::WindowUpdate::load(head, &bytes[frame::HEADER_LEN..]);
@@ -196,7 +196,7 @@ fn decode_frame(
                 proto_err!(conn: "failed to load WINDOW_UPDATE frame; err={:?}", e);
                 Error::library_go_away(Reason::PROTOCOL_ERROR)
             })?
-            .into()
+                .into()
         }
         Kind::Data => {
             let _ = bytes.split_to(frame::HEADER_LEN);
@@ -207,7 +207,7 @@ fn decode_frame(
                 proto_err!(conn: "failed to load DATA frame; err={:?}", e);
                 Error::library_go_away(Reason::PROTOCOL_ERROR)
             })?
-            .into()
+                .into()
         }
         Kind::Headers => header_block!(Headers, head, bytes),
         Kind::Reset => {
@@ -216,7 +216,7 @@ fn decode_frame(
                 proto_err!(conn: "failed to load RESET frame; err={:?}", e);
                 Error::library_go_away(Reason::PROTOCOL_ERROR)
             })?
-            .into()
+                .into()
         }
         Kind::GoAway => {
             let res = frame::GoAway::load(&bytes[frame::HEADER_LEN..]);
@@ -224,7 +224,7 @@ fn decode_frame(
                 proto_err!(conn: "failed to load GO_AWAY frame; err={:?}", e);
                 Error::library_go_away(Reason::PROTOCOL_ERROR)
             })?
-            .into()
+                .into()
         }
         Kind::PushPromise => header_block!(PushPromise, head, bytes),
         Kind::Priority => {
@@ -317,6 +317,14 @@ fn decode_frame(
                 return Ok(None);
             }
         }
+        #[cfg(feature = "bifrost-protocol")]
+        Kind::BifrostCall => {
+            return Ok(None);
+        }
+        #[cfg(feature = "bifrost-protocol")]
+        Kind::BifrostAnswer => {
+            return Ok(None);
+        }
         Kind::Unknown => {
             // Unknown frames are ignored
             return Ok(None);
@@ -327,8 +335,8 @@ fn decode_frame(
 }
 
 impl<T> Stream for FramedRead<T>
-where
-    T: AsyncRead + Unpin,
+    where
+        T: AsyncRead + Unpin,
 {
     type Item = Result<Frame, Error>;
 
