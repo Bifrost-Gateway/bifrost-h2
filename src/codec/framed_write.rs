@@ -232,6 +232,19 @@ where
         tracing::debug!(frame = ?item, "send");
 
         match item {
+            Frame::BifrostCall(mut v) =>{
+                // Ensure that the payload is not greater than the max frame.
+                let len = v.payload().remaining();
+
+                if len > self.max_frame_size() {
+                    return Err(PayloadTooBig);
+                }
+                v.encode_chunk(self.buf.get_mut());
+
+                // The chunk has been fully encoded, so there is no need to
+                // keep it around
+                assert_eq!(v.payload().remaining(), 0, "chunk not fully encoded");
+            }
             Frame::Data(mut v) => {
                 // Ensure that the payload is not greater than the max frame.
                 let len = v.payload().remaining();

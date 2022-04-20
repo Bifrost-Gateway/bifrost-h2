@@ -8,8 +8,8 @@ name = "h2"
 version = "0.3.13"
 license = "MIT"
 authors = [
-  "Carl Lerche <me@carllerche.com>",
-  "Sean McArthur <sean@seanmonstar.com>",
+    "Carl Lerche <me@carllerche.com>",
+    "Sean McArthur <sean@seanmonstar.com>",
 ]
 description = "An HTTP/2 client and server"
 documentation = "https://docs.rs/h2"
@@ -63,5 +63,10 @@ env_logger = { version = "0.9", default-features = false }
 tokio-rustls = "0.23.2"
 webpki-roots = "0.22.2"
 
+[[example]]
+name = "server"
+path = "examples/server.rs"
+required-features = ["stream", "bifrost-protocol"]
+
 [package.metadata.docs.rs]
-features = ["stream","bifrost-protocol"]
+features = ["stream", "bifrost-protocol"]

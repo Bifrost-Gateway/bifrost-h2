@@ -460,6 +460,11 @@ where
     fn recv_frame(&mut self, frame: Option<Frame>) -> Result<ReceivedFrame, Error> {
         use crate::frame::Frame::*;
         match frame {
+            #[cfg(feature = "bifrost-protocol")]
+            Some(BifrostCall(frame))=>{
+                tracing::trace!(?frame, "recv BIFROST_CALL");
+                self.streams.recv_bifrost_call(frame)?;
+            }
             Some(Headers(frame)) => {
                 tracing::trace!(?frame, "recv HEADERS");
                 self.streams.recv_headers(frame)?;

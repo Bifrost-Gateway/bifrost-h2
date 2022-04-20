@@ -82,7 +82,7 @@ impl<T> BifrostCall<T> {
 }
 
 impl BifrostCall<Bytes> {
-    pub(crate) fn load(head: Head, mut payload: Bytes) -> Result<Self, Error> {
+    pub(crate) fn load(head: Head, payload: Bytes) -> Result<Self, Error> {
         let flags = BifrostCallFlags::load(head.flag());
 
         // The stream identifier must not be zero
@@ -114,7 +114,7 @@ impl<T: Buf> BifrostCall<T> {
 
 impl<T> From<BifrostCall<T>> for Frame<T> {
     fn from(src: BifrostCall<T>) -> Self {
-        Frame::Data(src)
+        Frame::BifrostCall(src)
     }
 }
 

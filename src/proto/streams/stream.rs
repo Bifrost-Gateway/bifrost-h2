@@ -1,3 +1,4 @@
+use std::mem::take;
 use super::*;
 
 use std::task::{Context, Waker};
@@ -99,8 +100,16 @@ pub(super) struct Stream {
     /// Frames pending for this stream to read
     pub pending_recv: buffer::Deque,
 
+    /// Frames pending for this stream to read
+    #[cfg(feature = "bifrost-protocol")]
+    pub pending_bifrost_call_recv: buffer::Deque,
+
     /// Task tracking receiving frames
     pub recv_task: Option<Waker>,
+
+    /// Task tracking bifrost call receiving frames
+    #[cfg(feature = "bifrost-protocol")]
+    pub bifrost_call_recv_task: Option<Waker>,
 
     /// The stream's pending push promises
     pub pending_push_promises: store::Queue<NextAccept>,
@@ -180,7 +189,9 @@ impl Stream {
             reset_at: None,
             next_reset_expire: None,
             pending_recv: buffer::Deque::new(),
+            pending_bifrost_call_recv: buffer::Deque::new(),
             recv_task: None,
+            bifrost_call_recv_task: None,
             pending_push_promises: store::Queue::new(),
             content_length: ContentLength::Omitted,
         }
@@ -323,6 +334,13 @@ impl Stream {
 
     pub fn wait_send(&mut self, cx: &Context) {
         self.send_task = Some(cx.waker().clone());
+    }
+
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn notify_bifrost_call_recv(&mut self){
+        if let Some(task) = self.bifrost_call_recv_task.take() {
+            task.wake();
+        }
     }
 
     pub fn notify_recv(&mut self) {

@@ -9,6 +9,7 @@ use http::{HeaderMap, Request, Response};
 use std::io;
 use std::task::{Poll, Waker};
 use std::time::{Duration, Instant};
+use tracing::event;
 
 #[derive(Debug)]
 pub(super) struct Recv {
@@ -78,6 +79,8 @@ pub(super) enum RecvHeaderBlockError<T> {
 pub(crate) enum Open {
     PushPromise,
     Headers,
+    #[cfg(feature = "bifrost-protocol")]
+    BifrostCall
 }
 
 impl Recv {
@@ -521,6 +524,14 @@ impl Recv {
         }
 
         stream.pending_recv.is_empty()
+    }
+
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn recv_bifrost_call(&mut self, frame: frame::BifrostCall, stream: &mut store::Ptr) -> Result<(), Error>{
+        let event = Event::Data(frame.into_payload());
+        stream.pending_bifrost_call_recv.push_back(&mut self.buffer, event);
+        stream.notify_bifrost_call_recv();
+        Ok(())
     }
 
     pub fn recv_data(&mut self, frame: frame::Data, stream: &mut store::Ptr) -> Result<(), Error> {

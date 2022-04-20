@@ -101,6 +101,7 @@ impl<T> Frame<T> {
             GoAway(frame) => frame.into(),
             WindowUpdate(frame) => frame.into(),
             Reset(frame) => frame.into(),
+            BifrostCall(frame) => frame.map(f).into()
         }
     }
 }
@@ -119,6 +120,7 @@ impl<T> fmt::Debug for Frame<T> {
             GoAway(ref frame) => fmt::Debug::fmt(frame, fmt),
             WindowUpdate(ref frame) => fmt::Debug::fmt(frame, fmt),
             Reset(ref frame) => fmt::Debug::fmt(frame, fmt),
+            BifrostCall(ref frame) => fmt::Debug::fmt(frame,fmt)
         }
     }
 }

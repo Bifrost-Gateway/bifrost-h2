@@ -18,8 +18,8 @@ use std::{fmt, io};
 
 #[derive(Debug)]
 pub(crate) struct Streams<B, P>
-where
-    P: Peer,
+    where
+        P: Peer,
 {
     /// Holds most of the connection and stream related state for processing
     /// HTTP/2 frames associated with streams.
@@ -105,9 +105,9 @@ struct SendBuffer<B> {
 // ===== impl Streams =====
 
 impl<B, P> Streams<B, P>
-where
-    B: Buf,
-    P: Peer,
+    where
+        B: Buf,
+        P: Peer,
 {
     pub fn new(config: Config) -> Self {
         let peer = P::r#dyn();
@@ -153,8 +153,8 @@ where
         cx: &mut Context,
         dst: &mut Codec<T, Prioritized<B>>,
     ) -> Poll<io::Result<()>>
-    where
-        T: AsyncWrite + Unpin,
+        where
+            T: AsyncWrite + Unpin,
     {
         let mut me = self.inner.lock().unwrap();
         let me = &mut *me;
@@ -174,8 +174,8 @@ where
         cx: &mut Context,
         dst: &mut Codec<T, Prioritized<B>>,
     ) -> Poll<io::Result<()>>
-    where
-        T: AsyncWrite + Unpin,
+        where
+            T: AsyncWrite + Unpin,
     {
         let mut me = self.inner.lock().unwrap();
         me.poll_complete(&self.send_buffer, cx, dst)
@@ -314,6 +314,12 @@ impl<B> DynStreams<'_, B> {
         let mut me = self.inner.lock().unwrap();
 
         me.recv_headers(self.peer, &self.send_buffer, frame)
+    }
+
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn recv_bifrost_call(&mut self, frame: frame::BifrostCall) -> Result<(), Error> {
+        let mut me = self.inner.lock().unwrap();
+        me.recv_bifrost_call(self.peer, &self.send_buffer, frame)
     }
 
     pub fn recv_data(&mut self, frame: frame::Data) -> Result<(), Error> {
@@ -483,7 +489,7 @@ impl Inner {
                         } else {
                             Err(Error::library_reset(stream.id, Reason::REFUSED_STREAM))
                         }
-                    },
+                    }
                     Err(RecvHeaderBlockError::State(err)) => Err(err),
                 }
             } else {
@@ -499,6 +505,58 @@ impl Inner {
 
             actions.reset_on_recv_stream_err(send_buffer, stream, counts, res)
         })
+    }
+
+    #[cfg(feature = "bifrost-protocol")]
+    fn recv_bifrost_call<B>(
+        &mut self,
+        peer: peer::Dyn,
+        _send_buffer: &SendBuffer<B>,
+        frame: frame::BifrostCall,
+    ) -> Result<(), Error> {
+        let id = frame.stream_id();
+        if peer.is_server() {
+            return Err(Error::library_reset(id, Reason::STREAM_CLOSED));
+        }
+        if id > self.actions.recv.max_stream_id() {
+            tracing::trace!(
+                "id ({:?}) > max_stream_id ({:?}), ignoring HEADERS",
+                id,
+                self.actions.recv.max_stream_id()
+            );
+            return Ok(());
+        }
+
+        let key = match self.store.find_entry(id) {
+            Entry::Occupied(e) => e.key(),
+            Entry::Vacant(e) => {
+                match self
+                    .actions
+                    .recv
+                    .open(id, Open::BifrostCall, &mut self.counts)?
+                {
+                    //TODO: windows size
+                    Some(stream_id) => {
+                        let stream = Stream::new(
+                            stream_id,
+                            self.actions.send.init_window_sz(),
+                            self.actions.recv.init_window_sz(),
+                        );
+                        e.insert(stream)
+                    }
+                    None => return Ok(()),
+                }
+            }
+        };
+
+        let mut stream = self.store.resolve(key);
+        // stream.pending_recv.push_back(self.b)
+
+        let actions = &mut self.actions;
+        let res = actions.recv.recv_bifrost_call(frame, &mut stream);
+        if let Err(Error::Reset(..)) = res {
+            return Err(Error::library_reset(id, Reason::STREAM_CLOSED));
+        } else { Ok(()) }
     }
 
     fn recv_data<B>(
@@ -832,9 +890,9 @@ impl Inner {
         cx: &mut Context,
         dst: &mut Codec<T, Prioritized<B>>,
     ) -> Poll<io::Result<()>>
-    where
-        T: AsyncWrite + Unpin,
-        B: Buf,
+        where
+            T: AsyncWrite + Unpin,
+            B: Buf,
     {
         let mut send_buffer = send_buffer.inner.lock().unwrap();
         let send_buffer = &mut *send_buffer;
@@ -909,8 +967,8 @@ impl Inner {
 }
 
 impl<B> Streams<B, client::Peer>
-where
-    B: Buf,
+    where
+        B: Buf,
 {
     pub fn poll_pending_open(
         &mut self,
@@ -936,8 +994,8 @@ where
 }
 
 impl<B, P> Streams<B, P>
-where
-    P: Peer,
+    where
+        P: Peer,
 {
     pub fn as_dyn(&self) -> DynStreams<B> {
         let Self {
@@ -992,8 +1050,8 @@ where
 
 // no derive because we don't need B and P to be Clone.
 impl<B, P> Clone for Streams<B, P>
-where
-    P: Peer,
+    where
+        P: Peer,
 {
     fn clone(&self) -> Self {
         self.inner.lock().unwrap().refs += 1;
@@ -1006,8 +1064,8 @@ where
 }
 
 impl<B, P> Drop for Streams<B, P>
-where
-    P: Peer,
+    where
+        P: Peer,
 {
     fn drop(&mut self) {
         if let Ok(mut inner) = self.inner.lock() {
@@ -1025,8 +1083,8 @@ where
 
 impl<B> StreamRef<B> {
     pub fn send_data(&mut self, data: B, end_stream: bool) -> Result<(), UserError>
-    where
-        B: Buf,
+        where
+            B: Buf,
     {
         let mut me = self.opaque.inner.lock().unwrap();
         let me = &mut *me;
@@ -1231,8 +1289,8 @@ impl<B> StreamRef<B> {
     }
 
     pub fn clone_to_opaque(&self) -> OpaqueStreamRef
-    where
-        B: 'static,
+        where
+            B: 'static,
     {
         self.opaque.clone()
     }
