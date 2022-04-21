@@ -137,6 +137,27 @@ impl Prioritize {
         self.pending_open.push(stream);
     }
 
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn send_bifrost_call<B>(
+        &mut self,
+        frame: frame::BifrostCall<B>,
+        buffer: &mut Buffer<Frame<B>>,
+        stream: &mut store::Ptr,
+        _counts: &mut Counts,
+        task: &mut Option<Waker>,
+    ) -> Result<(), UserError>
+        where
+            B: Buf,
+    {
+        let sz = frame.payload().remaining();
+
+        if sz > MAX_WINDOW_SIZE as usize {
+            return Err(UserError::PayloadTooBig);
+        }
+        self.queue_frame(frame.into(), buffer, stream, task);
+        Ok(())
+    }
+
     /// Send a data frame
     pub fn send_data<B>(
         &mut self,
@@ -146,8 +167,8 @@ impl Prioritize {
         counts: &mut Counts,
         task: &mut Option<Waker>,
     ) -> Result<(), UserError>
-    where
-        B: Buf,
+        where
+            B: Buf,
     {
         let sz = frame.payload().remaining();
 
@@ -484,9 +505,9 @@ impl Prioritize {
         counts: &mut Counts,
         dst: &mut Codec<T, Prioritized<B>>,
     ) -> Poll<io::Result<()>>
-    where
-        T: AsyncWrite + Unpin,
-        B: Buf,
+        where
+            T: AsyncWrite + Unpin,
+            B: Buf,
     {
         // Ensure codec is ready
         ready!(dst.poll_ready(cx))?;
@@ -547,8 +568,8 @@ impl Prioritize {
         store: &mut Store,
         dst: &mut Codec<T, Prioritized<B>>,
     ) -> bool
-    where
-        B: Buf,
+        where
+            B: Buf,
     {
         let span = tracing::trace_span!("try_reclaim_frame");
         let _e = span.enter();
@@ -567,8 +588,8 @@ impl Prioritize {
         store: &mut Store,
         frame: frame::Data<Prioritized<B>>,
     ) -> bool
-    where
-        B: Buf,
+        where
+            B: Buf,
     {
         tracing::trace!(
             ?frame,
@@ -669,8 +690,8 @@ impl Prioritize {
         max_len: usize,
         counts: &mut Counts,
     ) -> Option<Frame<Prioritized<B>>>
-    where
-        B: Buf,
+        where
+            B: Buf,
     {
         let span = tracing::trace_span!("pop_frame");
         let _e = span.enter();
@@ -872,8 +893,8 @@ impl Prioritize {
 // ===== impl Prioritized =====
 
 impl<B> Buf for Prioritized<B>
-where
-    B: Buf,
+    where
+        B: Buf,
 {
     fn remaining(&self) -> usize {
         self.inner.remaining()

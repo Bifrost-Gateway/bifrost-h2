@@ -246,6 +246,22 @@ impl Send {
         self.prioritize.schedule_send(stream, task);
     }
 
+
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn send_bifrost_call<B>(
+        &mut self,
+        frame: frame::BifrostCall<B>,
+        buffer: &mut Buffer<Frame<B>>,
+        stream: &mut store::Ptr,
+        counts: &mut Counts,
+        task: &mut Option<Waker>,
+    ) -> Result<(), UserError>
+        where
+            B: Buf,{
+        self.prioritize
+            .send_bifrost_call(frame, buffer, stream, counts, task)
+    }
+
     pub fn send_data<B>(
         &mut self,
         frame: frame::Data<B>,

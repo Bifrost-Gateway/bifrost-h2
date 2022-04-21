@@ -197,6 +197,13 @@ pub struct Connection<T, B: Buf> {
     connection: proto::Connection<T, Peer, B>,
 }
 
+///
+#[cfg(feature = "bifrost-protocol")]
+#[derive(Debug)]
+pub struct BifrostCallSender<B: Buf> {
+    inner: proto::Streams<B, Peer>,
+}
+
 /// Builds server connections with custom configuration values.
 ///
 /// Methods can be chained in order to set the configuration values.
@@ -353,8 +360,8 @@ const PREFACE: [u8; 24] = *b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
 /// # pub fn main() {}
 /// ```
 pub fn handshake<T>(io: T) -> Handshake<T, Bytes>
-where
-    T: AsyncRead + AsyncWrite + Unpin,
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
 {
     Builder::new().handshake(io)
 }
@@ -362,9 +369,9 @@ where
 // ===== impl Connection =====
 
 impl<T, B> Connection<T, B>
-where
-    T: AsyncRead + AsyncWrite + Unpin,
-    B: Buf + 'static,
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+        B: Buf + 'static,
 {
     fn handshake2(io: T, builder: Builder) -> Handshake<T, B> {
         let span = tracing::trace_span!("server_handshake");
@@ -580,9 +587,9 @@ where
 
 #[cfg(feature = "stream")]
 impl<T, B> futures_core::Stream for Connection<T, B>
-where
-    T: AsyncRead + AsyncWrite + Unpin,
-    B: Buf + 'static,
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+        B: Buf + 'static,
 {
     type Item = Result<(Request<RecvStream>, SendResponse<B>), crate::Error>;
 
@@ -592,9 +599,9 @@ where
 }
 
 impl<T, B> fmt::Debug for Connection<T, B>
-where
-    T: fmt::Debug,
-    B: fmt::Debug + Buf,
+    where
+        T: fmt::Debug,
+        B: fmt::Debug + Buf,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("Connection")
@@ -1005,9 +1012,9 @@ impl Builder {
     /// # pub fn main() {}
     /// ```
     pub fn handshake<T, B>(&self, io: T) -> Handshake<T, B>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-        B: Buf + 'static,
+        where
+            T: AsyncRead + AsyncWrite + Unpin,
+            B: Buf + 'static,
     {
         Connection::handshake2(io, self.clone())
     }
@@ -1192,9 +1199,9 @@ impl<T, B: Buf> Flush<T, B> {
 }
 
 impl<T, B> Future for Flush<T, B>
-where
-    T: AsyncWrite + Unpin,
-    B: Buf,
+    where
+        T: AsyncWrite + Unpin,
+        B: Buf,
 {
     type Output = Result<Codec<T, B>, crate::Error>;
 
@@ -1221,9 +1228,9 @@ impl<T, B: Buf> ReadPreface<T, B> {
 }
 
 impl<T, B> Future for ReadPreface<T, B>
-where
-    T: AsyncRead + Unpin,
-    B: Buf,
+    where
+        T: AsyncRead + Unpin,
+        B: Buf,
 {
     type Output = Result<Codec<T, B>, crate::Error>;
 
@@ -1260,11 +1267,11 @@ where
 // ===== impl Handshake =====
 
 impl<T, B: Buf> Future for Handshake<T, B>
-where
-    T: AsyncRead + AsyncWrite + Unpin,
-    B: Buf + 'static,
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+        B: Buf + 'static,
 {
-    type Output = Result<Connection<T, B>, crate::Error>;
+    type Output = Result<(Connection<T, B>,BifrostCallSender<B>), crate::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let span = self.span.clone(); // XXX(eliza): T_T
@@ -1309,13 +1316,15 @@ where
                         },
                     );
 
+                    let stream_cloned = connection.streams().clone();
+                    let bifrost_call_sender = BifrostCallSender{inner:stream_cloned};
                     tracing::trace!("connection established!");
                     let mut c = Connection { connection };
                     if let Some(sz) = self.builder.initial_target_connection_window_size {
                         c.set_target_window_size(sz);
                     }
 
-                    return Poll::Ready(Ok(c));
+                    return Poll::Ready(Ok((c,bifrost_call_sender)));
                 }
                 Handshaking::Done => {
                     panic!("Handshaking::poll() called again after handshaking was complete")
@@ -1326,9 +1335,9 @@ where
 }
 
 impl<T, B> fmt::Debug for Handshake<T, B>
-where
-    T: AsyncRead + AsyncWrite + fmt::Debug,
-    B: fmt::Debug + Buf,
+    where
+        T: AsyncRead + AsyncWrite + fmt::Debug,
+        B: fmt::Debug + Buf,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "server::Handshake")
@@ -1535,11 +1544,20 @@ impl proto::Peer for Peer {
     }
 }
 
+
+#[cfg(feature = "bifrost-protocol")]
+impl BifrostCallSender<Bytes>{
+    ///
+    pub async fn send_bifrost_call(&mut self,data:Bytes)-> Result<(), crate::Error>{
+        self.inner.send_bifrost_call(data)
+    }
+}
+
 // ===== impl Handshaking =====
 
 impl<T, B> fmt::Debug for Handshaking<T, B>
-where
-    B: Buf,
+    where
+        B: Buf,
 {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {

@@ -141,6 +141,10 @@ where
         }
     }
 
+    pub(crate) fn streams(&self) -> &Streams<B, P> {
+        &self.inner.streams
+    }
+
     /// connection flow control
     pub(crate) fn set_target_window_size(&mut self, size: WindowSize) {
         self.inner.streams.set_target_connection_window_size(size);
@@ -531,15 +535,6 @@ enum ReceivedFrame {
     Done,
 }
 
-impl<T, B> Connection<T, client::Peer, B>
-where
-    T: AsyncRead + AsyncWrite,
-    B: Buf,
-{
-    pub(crate) fn streams(&self) -> &Streams<B, client::Peer> {
-        &self.inner.streams
-    }
-}
 
 impl<T, B> Connection<T, server::Peer, B>
 where

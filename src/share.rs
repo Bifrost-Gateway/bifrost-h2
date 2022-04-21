@@ -3,7 +3,7 @@ use crate::frame::Reason;
 use crate::proto::{self, WindowSize};
 
 use bytes::{Buf, Bytes};
-use http::HeaderMap;
+use http::{HeaderMap, Method};
 
 use crate::PollExt;
 use std::fmt;

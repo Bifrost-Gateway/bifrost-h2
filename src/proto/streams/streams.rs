@@ -8,13 +8,14 @@ use crate::proto::{peer, Error, Initiator, Open, Peer, WindowSize};
 use crate::{client, proto, server};
 
 use bytes::{Buf, Bytes};
-use http::{HeaderMap, Request, Response};
+use http::{HeaderMap, Method, Request, Response};
 use std::task::{Context, Poll, Waker};
 use tokio::io::AsyncWrite;
 
 use crate::PollExt;
 use std::sync::{Arc, Mutex};
 use std::{fmt, io};
+use crate::proto::streams::stream::ContentLength;
 
 #[derive(Debug)]
 pub(crate) struct Streams<B, P>
@@ -247,6 +248,64 @@ impl<B, P> Streams<B, P>
 
         me.actions.recv.apply_local_settings(frame, &mut me.store)
     }
+
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn send_bifrost_call(&mut self, data: B) -> Result<(), crate::Error> {
+
+        let mut me = self.inner.lock().unwrap();
+        let me = &mut *me;
+
+        let mut send_buffer = self.send_buffer.inner.lock().unwrap();
+        let send_buffer = &mut *send_buffer;
+
+        me.actions.ensure_no_conn_error()?;
+        me.actions.send.ensure_next_stream_id()?;
+
+        // only server can call
+        if !me.counts.peer().is_server() {
+            // Servers cannot open streams. PushPromise must first be reserved.
+            return Err(UserError::UnexpectedFrameType.into());
+        }
+
+        //new stream,
+        //TODO: if one shoot, do not open(and insert into store)
+        let stream_id = me.actions.send.open()?;
+
+        let mut stream = Stream::new(
+            stream_id,
+            me.actions.send.init_window_sz(),
+            me.actions.recv.init_window_sz(),
+        );
+        let mut stream = me.store.insert(stream.id, stream);
+
+        let mut frame = frame::BifrostCall::new(stream_id,data);
+
+        let sent = me.actions.send.send_bifrost_call(
+            frame,
+            send_buffer,
+            &mut stream,
+            &mut me.counts,
+            &mut me.actions.task,
+        );
+
+
+        if let Err(err) = sent {
+            stream.unlink();
+            stream.remove();
+            return Err(err.into());
+        }
+
+        // Given that the stream has been initialized, it should not be in the
+        // closed state.
+        debug_assert!(!stream.state.is_closed());
+
+        // TODO: ideally, OpaqueStreamRefs::new would do this, but we're holding
+        // the lock, so it can't.
+        me.refs += 1;
+
+        Ok(())
+    }
+
 
     pub fn send_request(
         &mut self,
