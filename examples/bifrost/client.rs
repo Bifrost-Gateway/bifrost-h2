@@ -2,6 +2,7 @@ use h2::client;
 use http::{HeaderMap, Request};
 
 use std::error::Error;
+use bytes::Bytes;
 
 use tokio::net::TcpStream;
 
@@ -12,10 +13,12 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let tcp = TcpStream::connect("127.0.0.1:5928").await?;
     let (mut client, h2, mut acceptor) = client::handshake(tcp).await?;
 
-    tokio::spawn(async move{
-        let (req_byte,_response) = acceptor.accept().await.unwrap().unwrap();
+    tokio::spawn(async move {
+        let (req_byte, mut response) = acceptor.accept().await.unwrap().unwrap();
         let b = String::from_utf8(req_byte.to_vec()).unwrap();
         dbg!(b);
+
+        response.send_bifrost_call_response(Bytes::from_static(b"hi, wtf response"));
     });
     println!("sending request");
 

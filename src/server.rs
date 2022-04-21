@@ -129,6 +129,7 @@ use std::time::Duration;
 use std::{fmt, io};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tracing::instrument::{Instrument, Instrumented};
+use crate::client::ResponseFuture;
 
 /// In progress HTTP/2 connection handshake future.
 ///
@@ -202,6 +203,14 @@ pub struct Connection<T, B: Buf> {
 #[derive(Debug)]
 pub struct BifrostCallSender<B: Buf> {
     inner: proto::Streams<B, Peer>,
+}
+
+/// A future of an HTTP response.
+#[derive(Debug)]
+#[must_use = "futures do nothing unless polled"]
+#[cfg(feature = "bifrost-protocol")]
+pub struct BifrostResponseFuture {
+    pub(crate) inner: proto::OpaqueStreamRef,
 }
 
 /// Builds server connections with custom configuration values.
@@ -1283,7 +1292,7 @@ impl<T, B: Buf> Future for Handshake<T, B>
         T: AsyncRead + AsyncWrite + Unpin,
         B: Buf + 'static,
 {
-    type Output = Result<(Connection<T, B>,BifrostCallSender<B>), crate::Error>;
+    type Output = Result<(Connection<T, B>, BifrostCallSender<B>), crate::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let span = self.span.clone(); // XXX(eliza): T_T
@@ -1329,14 +1338,14 @@ impl<T, B: Buf> Future for Handshake<T, B>
                     );
 
                     let stream_cloned = connection.streams().clone();
-                    let bifrost_call_sender = BifrostCallSender{inner:stream_cloned};
+                    let bifrost_call_sender = BifrostCallSender { inner: stream_cloned };
                     tracing::trace!("connection established!");
                     let mut c = Connection { connection };
                     if let Some(sz) = self.builder.initial_target_connection_window_size {
                         c.set_target_window_size(sz);
                     }
 
-                    return Poll::Ready(Ok((c,bifrost_call_sender)));
+                    return Poll::Ready(Ok((c, bifrost_call_sender)));
                 }
                 Handshaking::Done => {
                     panic!("Handshaking::poll() called again after handshaking was complete")
@@ -1558,12 +1567,23 @@ impl proto::Peer for Peer {
 
 
 #[cfg(feature = "bifrost-protocol")]
-impl BifrostCallSender<Bytes>{
+impl BifrostCallSender<Bytes> {
     ///
-    pub async fn send_bifrost_call(&mut self,data:Bytes)-> Result<(), crate::Error>{
+    pub async fn send_bifrost_call(&mut self, data: Bytes) -> Result<BifrostResponseFuture, crate::Error> {
         self.inner.send_bifrost_call(data)
     }
 }
+
+#[cfg(feature = "bifrost-protocol")]
+impl Future for BifrostResponseFuture {
+    type Output = Result<Bytes, crate::Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let bytes = ready!(self.inner.poll_bifrost_response(cx))?;
+        Poll::Ready(Ok(bytes))
+    }
+}
+
 
 // ===== impl Handshaking =====
 

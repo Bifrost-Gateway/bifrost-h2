@@ -14,8 +14,10 @@ use tokio::io::AsyncWrite;
 
 use crate::PollExt;
 use std::sync::{Arc, Mutex};
-use std::{fmt, io};
+use std::{clone, fmt, io};
+use crate::client::ResponseFuture;
 use crate::proto::streams::stream::ContentLength;
+use crate::server::BifrostResponseFuture;
 
 #[derive(Debug)]
 pub(crate) struct Streams<B, P>
@@ -230,7 +232,9 @@ impl<B, P> Streams<B, P>
     }
 
     #[cfg(feature = "bifrost-protocol")]
-    pub fn send_bifrost_call(&mut self, data: B) -> Result<(), crate::Error> {
+    pub fn send_bifrost_call(&mut self, data: B) -> Result<BifrostResponseFuture, crate::Error>
+        where B: Buf + 'static
+    {
         let mut me = self.inner.lock().unwrap();
         let me = &mut *me;
 
@@ -255,7 +259,9 @@ impl<B, P> Streams<B, P>
             me.actions.send.init_window_sz(),
             me.actions.recv.init_window_sz(),
         );
+
         let mut stream = me.store.insert(stream.id, stream);
+
 
         let mut frame = frame::BifrostCall::new(stream_id, data);
 
@@ -282,7 +288,18 @@ impl<B, P> Streams<B, P>
         // the lock, so it can't.
         me.refs += 1;
 
-        Ok(())
+
+        let stream_ref = StreamRef {
+            opaque: OpaqueStreamRef::new(self.inner.clone(), &mut stream),
+            send_buffer: self.send_buffer.clone(),
+        };
+
+        let response = BifrostResponseFuture {
+            inner: stream_ref.clone_to_opaque(),
+        };
+
+
+        Ok(response)
     }
 
 
@@ -595,7 +612,7 @@ impl Inner {
         frame: frame::BifrostCall,
     ) -> Result<(), Error> {
         let id = frame.stream_id();
-        if peer.is_server() {
+        if peer.is_server() && !frame.is_response() {
             return Err(Error::library_reset(id, Reason::STREAM_CLOSED));
         }
         if id > self.actions.recv.max_stream_id() {
@@ -1442,6 +1459,18 @@ impl OpaqueStreamRef {
             key: stream.key(),
         }
     }
+
+    /// Called by a client to check for a received response.
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn poll_bifrost_response(&mut self, cx: &Context) -> Poll<Result<Bytes, proto::Error>> {
+        let mut me = self.inner.lock().unwrap();
+        let me = &mut *me;
+
+        let mut stream = me.store.resolve(self.key);
+
+        me.actions.recv.poll_bifrost_response(cx, &mut stream)
+    }
+
     /// Called by a client to check for a received response.
     pub fn poll_response(&mut self, cx: &Context) -> Poll<Result<Response<()>, proto::Error>> {
         let mut me = self.inner.lock().unwrap();

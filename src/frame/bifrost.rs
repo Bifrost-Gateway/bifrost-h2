@@ -71,6 +71,10 @@ impl<T> BifrostCall<T> {
         Head::new(Kind::BifrostCall, self.flags.into(), self.stream_id)
     }
 
+    pub fn is_response(&self) ->bool{
+        self.flags.is_response()
+    }
+
     pub fn set_response(&mut self) {
         self.flags.set_response();
     }

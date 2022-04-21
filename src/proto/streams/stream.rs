@@ -101,6 +101,8 @@ pub(super) struct Stream {
     pub pending_recv: buffer::Deque,
 
     /// Frames pending for this stream to read
+    /// for server side, this deque only hold: BifrostCall(flag = ONE_SHOOT or NORMAL)
+    /// for client side, this deque only hold: BifrostCall(flag = RESPONSE)
     #[cfg(feature = "bifrost-protocol")]
     pub pending_bifrost_call_recv: buffer::Deque,
 
@@ -108,6 +110,7 @@ pub(super) struct Stream {
     pub recv_task: Option<Waker>,
 
     /// Task tracking bifrost call receiving frames
+    /// hands up!! only server side can set this waker, when poll response not ready!
     #[cfg(feature = "bifrost-protocol")]
     pub bifrost_call_recv_task: Option<Waker>,
 

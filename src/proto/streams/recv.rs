@@ -315,6 +315,27 @@ impl Recv {
         }
     }
 
+    /// Called by the server to get the response
+    pub fn poll_bifrost_response(
+        &mut self,
+        cx: &Context,
+        stream: &mut store::Ptr,
+    ) -> Poll<Result<Bytes, proto::Error>> {
+        use super::peer::PollMessage::*;
+
+        // If the buffer is not empty, then the first frame must be a HEADERS
+        // frame or the user violated the contract.
+        match stream.pending_bifrost_call_recv.pop_front(&mut self.buffer) {
+            Some(Event::Data(response)) => Poll::Ready(Ok(response)),
+            Some(_) => panic!("poll_response called after response returned"),
+            None => {
+                stream.state.ensure_recv_open()?;
+                stream.bifrost_call_recv_task = Some(cx.waker().clone());
+                Poll::Pending
+            }
+        }
+    }
+
     /// Called by the client to get the response
     pub fn poll_response(
         &mut self,
@@ -547,15 +568,19 @@ impl Recv {
 
     #[cfg(feature = "bifrost-protocol")]
     pub fn recv_bifrost_call(&mut self, frame: frame::BifrostCall, stream: &mut store::Ptr) -> Result<(), Error> {
+        let is_response = frame.is_response();
         let event = Event::Data(frame.into_payload());
         stream.pending_bifrost_call_recv.push_back(&mut self.buffer, event);
         stream.notify_bifrost_call_recv();
 
         // Only client can receive a BifrostCall frame that initiates the stream.
+        // if the frame is response, do not insert into accept queue
         // already checked!
-        self.pending_bifrost_call_accept.push(stream);
-        if let Some(task) = self.pending_bifrost_call_task.take() {
-            task.wake();
+        if !is_response {
+            self.pending_bifrost_call_accept.push(stream);
+            if let Some(task) = self.pending_bifrost_call_task.take() {
+                task.wake();
+            }
         }
         Ok(())
     }
