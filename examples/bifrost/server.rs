@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let listener = TcpListener::bind("127.0.0.1:5928").await?;
 
-    println!("listening on {:?}", listener.local_addr());
+    println!("Bifrost server bootup, listening on {:?}", listener.local_addr());
 
     loop {
         if let Ok((socket, _peer_addr)) = listener.accept().await {
@@ -27,31 +27,42 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
 async fn serve(socket: TcpStream) -> Result<(), Box<dyn Error + Send + Sync>> {
     let (mut connection, mut call_sender) = server::handshake(socket).await?;
-    println!("H2 connection bound");
+    println!("H2 connection bound, handshake success.");
+
+    // for receive non bifrost request
     tokio::spawn(async move {
         while let Some(result) = connection.accept().await {
             let (request, respond) = result.unwrap();
             tokio::spawn(async move {
-                if let Err(e) = handle_request(request, respond).await {
+                if let Err(e) = handle_non_bifrost_request(request, respond).await {
                     println!("error while handling request: {}", e);
                 }
             });
         }
     });
-    for _i in 0..100 {
-        let response = call_sender.send_bifrost_call(Bytes::from("hi there".to_string()), false).await.unwrap().unwrap();
-        let r = response.await.unwrap();
-        let s = String::from_utf8(r.to_vec()).unwrap();
-        println!("{}", s);
-    }
+
+    //for send NORMAL bifrost request
+    tokio::spawn(async move {
+        for _i in 0..10 {
+            let response = call_sender.send_bifrost_call(Bytes::from(_i.to_string()), false).await.unwrap().unwrap();
+            println!(">>>> send(NORMAL): {}", _i.to_string());
+            let r = response.await.unwrap();
+            let s = String::from_utf8(r.to_vec()).unwrap();
+            println!("<<<< recv {}", s);
+        }
+
+        for _i in 10..20 {
+            if let None = call_sender.send_bifrost_call(Bytes::from(_i.to_string()), true).await.unwrap() {
+                println!(">>>> send(ONE_SHOOT): {}", _i.to_string());
+            }
+        }
+    });
 
 
-
-    println!("~~~~~~~~~~~ H2 connection CLOSE !!!!!! ~~~~~~~~~~~");
     Ok(())
 }
 
-async fn handle_request(
+async fn handle_non_bifrost_request(
     mut request: Request<RecvStream>,
     mut respond: SendResponse<Bytes>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -66,7 +77,6 @@ async fn handle_request(
 
     let response = http::Response::new(());
     let mut send = respond.send_response(response, false)?;
-    println!(">>>> send");
     send.send_data(Bytes::from_static(b"hello "), false)?;
     send.send_data(Bytes::from_static(b"world\n"), true)?;
 

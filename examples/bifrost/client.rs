@@ -13,17 +13,25 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let tcp = TcpStream::connect("127.0.0.1:5928").await?;
     let (mut client, h2, mut acceptor) = client::handshake(tcp).await?;
 
+    println!("H2 connection bound, handshake success.");
+
     let job = tokio::spawn(async move {
         while let Some(result) = acceptor.accept().await {
-            let (recv, mut respond) = result.unwrap();
+            let (recv, respond) = result.unwrap();
             let b = String::from_utf8(recv.to_vec()).unwrap();
-            dbg!(b);
             if let Some(mut respond) = respond {
-                respond.send_bifrost_call_response(Bytes::from_static(b"hi, wtf response"));
+                println!("<<<< recv(NORMAL) {}", &b);
+                respond.send_bifrost_call_response(Bytes::from(b)).unwrap();
+                println!(">>>> send response");
+            }else {
+                println!("<<<< recv(ONE_SHOOT) {}", b);
             }
         }
     });
-    println!("sending request");
+
+
+
+    println!("---sending non bifrost request---");
 
     let request = Request::builder()
         .uri("https://http2.akamai.com/")
@@ -59,6 +67,6 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         println!("GOT TRAILERS: {:?}", trailers);
     }
 
-    job.await;
+    let _ = job.await;
     Ok(())
 }
