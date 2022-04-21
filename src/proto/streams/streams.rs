@@ -3,7 +3,7 @@ use super::store::{self, Entry, Resolve, Store};
 use super::{Buffer, Config, Counts, Prioritized, Recv, Send, Stream, StreamId};
 use crate::codec::{Codec, SendError, UserError};
 use crate::ext::Protocol;
-use crate::frame::{self, BifrostCall, Frame, Reason};
+use crate::frame::{self, Frame, Reason};
 use crate::proto::{peer, Error, Initiator, Open, Peer, WindowSize};
 use crate::{client, proto, server};
 
@@ -14,10 +14,8 @@ use tokio::io::AsyncWrite;
 
 use crate::PollExt;
 use std::sync::{Arc, Mutex};
-use std::{clone, fmt, io};
-use crate::client::ResponseFuture;
+use std::{fmt, io};
 use crate::proto::streams::stream::ContentLength;
-use crate::server::BifrostResponseFuture;
 
 #[derive(Debug)]
 pub(crate) struct Streams<B, P>
@@ -254,7 +252,7 @@ impl<B, P> Streams<B, P>
         //TODO: if one shoot, do not open(and insert into store)
         let stream_id = me.actions.send.open()?;
 
-        let mut stream = Stream::new(
+        let stream = Stream::new(
             stream_id,
             me.actions.send.init_window_sz(),
             me.actions.recv.init_window_sz(),
@@ -314,8 +312,6 @@ impl<B, P> Streams<B, P>
         end_of_stream: bool,
         pending: Option<&OpaqueStreamRef>,
     ) -> Result<StreamRef<B>, SendError> {
-        use super::stream::ContentLength;
-        use http::Method;
 
         let protocol = request.extensions_mut().remove::<Protocol>();
 
@@ -1369,8 +1365,9 @@ impl<B> StreamRef<B> {
         me.actions.recv.take_request(&mut stream)
     }
 
+    //Todo: better design, not entire frame
     #[cfg(feature = "bifrost-protocol")]
-    pub fn take_bifrost_call(&self) -> Bytes {
+    pub fn take_bifrost_call(&self) -> frame::BifrostCall {
         let mut me = self.opaque.inner.lock().unwrap();
         let me = &mut *me;
 
@@ -1467,7 +1464,7 @@ impl OpaqueStreamRef {
 
     /// Called by a client to check for a received response.
     #[cfg(feature = "bifrost-protocol")]
-    pub fn poll_bifrost_response(&mut self, cx: &Context) -> Poll<Result<Bytes, proto::Error>> {
+    pub fn poll_bifrost_response(&mut self, cx: &Context) -> Poll<Result<frame::BifrostCall, proto::Error>> {
         let mut me = self.inner.lock().unwrap();
         let me = &mut *me;
 

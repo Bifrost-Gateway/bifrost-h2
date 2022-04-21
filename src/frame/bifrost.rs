@@ -55,9 +55,9 @@ impl<T> BifrostCall<T> {
     ///
     /// This does **not** include any padding that might have been originally
     /// included.
-    pub fn payload_mut(&mut self) -> &mut T {
-        &mut self.data
-    }
+    // pub fn payload_mut(&mut self) -> &mut T {
+    //     &mut self.data
+    // }
 
     /// Consumes `self` and returns the frame's payload.
     ///
@@ -71,15 +71,18 @@ impl<T> BifrostCall<T> {
         Head::new(Kind::BifrostCall, self.flags.into(), self.stream_id)
     }
 
-    pub fn is_response(&self) ->bool{
+    pub fn is_one_shoot(&self) -> bool {
+        self.flags.is_one_shoot()
+    }
+    pub fn is_response(&self) -> bool {
         self.flags.is_response()
     }
 
-    pub fn set_one_shoot(&mut self){
+    pub fn set_one_shoot(&mut self) {
         self.flags.set_one_shoot();
     }
 
-    pub fn set_normal(&mut self){
+    pub fn set_normal(&mut self) {
         self.flags.set_normal();
     }
 
@@ -148,7 +151,7 @@ impl<T> fmt::Debug for BifrostCall<T> {
 }
 
 // ===== impl DataFlags =====
-
+#[allow(dead_code)] //ops!
 impl BifrostCallFlags {
     fn load(bits: u8) -> BifrostCallFlags {
         BifrostCallFlags(bits & ALL)

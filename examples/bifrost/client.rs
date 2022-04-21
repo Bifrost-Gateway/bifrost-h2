@@ -18,7 +18,9 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
             let (recv, mut respond) = result.unwrap();
             let b = String::from_utf8(recv.to_vec()).unwrap();
             dbg!(b);
-            respond.send_bifrost_call_response(Bytes::from_static(b"hi, wtf response"));
+            if let Some(mut respond) = respond {
+                respond.send_bifrost_call_response(Bytes::from_static(b"hi, wtf response"));
+            }
         }
     });
     println!("sending request");

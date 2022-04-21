@@ -1,6 +1,6 @@
 use crate::codec::UserError;
 use crate::frame::{Reason, StreamId};
-use crate::{client, frame, server};
+use crate::{ frame, server};
 
 use crate::frame::DEFAULT_INITIAL_WINDOW_SIZE;
 use crate::proto::*;

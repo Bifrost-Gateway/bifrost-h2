@@ -129,7 +129,6 @@ use std::time::Duration;
 use std::{fmt, io};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tracing::instrument::{Instrument, Instrumented};
-use crate::client::ResponseFuture;
 
 /// In progress HTTP/2 connection handshake future.
 ///
@@ -1588,7 +1587,7 @@ impl Future for BifrostResponseFuture {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let bytes = ready!(self.inner.poll_bifrost_response(cx))?;
-        Poll::Ready(Ok(bytes))
+        Poll::Ready(Ok(bytes.into_payload()))
     }
 }
 

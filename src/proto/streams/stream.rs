@@ -1,4 +1,3 @@
-use std::mem::take;
 use super::*;
 
 use std::task::{Context, Waker};

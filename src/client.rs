@@ -1567,11 +1567,12 @@ impl proto::Peer for Peer {
 }
 
 #[cfg(feature = "bifrost-protocol")]
-impl<B: bytes::Buf> BifrostCallAcceptor<B>{
+impl<B: bytes::Buf> BifrostCallAcceptor<B> {
     /// Accept the next incoming request on this connection.
+    /// Todo: better design, maybe a struct for incoming
     pub async fn accept(
         &mut self,
-    ) -> Option<Result<(Bytes, SendResponse<B>), crate::Error>> {
+    ) -> Option<Result<(Bytes, Option<SendResponse<B>>), crate::Error>> {
         futures_util::future::poll_fn(move |cx| self.poll_accept(cx)).await
     }
 
@@ -1579,14 +1580,20 @@ impl<B: bytes::Buf> BifrostCallAcceptor<B>{
     pub fn poll_accept(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<(Bytes, SendResponse<B>), crate::Error>>> {
+    ) -> Poll<Option<Result<(Bytes, Option<SendResponse<B>>), crate::Error>>> {
         if let Some(inner) = self.inner.next_bifrost_incoming(cx) {
             tracing::trace!("received incoming");
             //TODO: trans
-            let bytes = inner.take_bifrost_call();
-            let respond = SendResponse { inner };
+            let frame = inner.take_bifrost_call();
 
-            return Poll::Ready(Some(Ok((bytes, respond))));
+            let respond = if frame.is_one_shoot() {
+                //streamRef will auto drop, when flag is one shoot
+                None
+            } else {
+                Some(SendResponse { inner })
+            };
+
+            return Poll::Ready(Some(Ok((frame.into_payload(), respond))));
         }
 
         Poll::Pending

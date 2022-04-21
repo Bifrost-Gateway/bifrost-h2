@@ -1,6 +1,6 @@
 use super::*;
 use crate::codec::UserError;
-use crate::frame::{self, PushPromiseHeaderError, Reason, DEFAULT_INITIAL_WINDOW_SIZE, BifrostCall};
+use crate::frame::{self, PushPromiseHeaderError, Reason, DEFAULT_INITIAL_WINDOW_SIZE};
 use crate::proto::{self, Error};
 use std::task::Context;
 
@@ -9,7 +9,6 @@ use http::{HeaderMap, Request, Response};
 use std::io;
 use std::task::{Poll, Waker};
 use std::time::{Duration, Instant};
-use tracing::event;
 
 #[derive(Debug)]
 pub(super) struct Recv {
@@ -73,6 +72,7 @@ pub(super) struct Recv {
 pub(super) enum Event {
     Headers(peer::PollMessage),
     Data(Bytes),
+    BifrostData(frame::BifrostCall),
     Trailers(HeaderMap),
 }
 
@@ -274,11 +274,9 @@ impl Recv {
     }
 
     #[cfg(feature = "bifrost-protocol")]
-    pub fn take_bifrost_call(&mut self, stream: &mut store::Ptr) -> Bytes {
-        use super::peer::PollMessage::*;
-
+    pub fn take_bifrost_call(&mut self, stream: &mut store::Ptr) -> frame::BifrostCall {
         match stream.pending_bifrost_call_recv.pop_front(&mut self.buffer) {
-            Some(Event::Data(request)) => request,
+            Some(Event::BifrostData(frame)) => frame,
             _ => panic!(),
         }
     }
@@ -320,13 +318,11 @@ impl Recv {
         &mut self,
         cx: &Context,
         stream: &mut store::Ptr,
-    ) -> Poll<Result<Bytes, proto::Error>> {
-        use super::peer::PollMessage::*;
-
+    ) -> Poll<Result<frame::BifrostCall, proto::Error>> {
         // If the buffer is not empty, then the first frame must be a HEADERS
         // frame or the user violated the contract.
         match stream.pending_bifrost_call_recv.pop_front(&mut self.buffer) {
-            Some(Event::Data(response)) => Poll::Ready(Ok(response)),
+            Some(Event::BifrostData(response)) => Poll::Ready(Ok(response)),
             Some(_) => panic!("poll_response called after response returned"),
             None => {
                 stream.state.ensure_recv_open()?;
@@ -569,7 +565,7 @@ impl Recv {
     #[cfg(feature = "bifrost-protocol")]
     pub fn recv_bifrost_call(&mut self, frame: frame::BifrostCall, stream: &mut store::Ptr) -> Result<(), Error> {
         let is_response = frame.is_response();
-        let event = Event::Data(frame.into_payload());
+        let event = Event::BifrostData(frame);
         stream.pending_bifrost_call_recv.push_back(&mut self.buffer, event);
         stream.notify_bifrost_call_recv();
 

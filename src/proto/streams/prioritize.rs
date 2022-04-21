@@ -10,7 +10,6 @@ use bytes::buf::{Buf, Take};
 use std::io;
 use std::task::{Context, Poll, Waker};
 use std::{cmp, fmt, mem};
-use crate::hpack::header::len;
 
 /// # Warning
 ///
@@ -723,7 +722,7 @@ impl Prioritize {
                     tracing::trace!(is_pending_reset);
 
                     let frame = match stream.pending_send.pop_front(buffer) {
-                        Some(Frame::BifrostCall(mut frame)) => {
+                        Some(Frame::BifrostCall(frame)) => {
                             Frame::BifrostCall(frame.map(|buf| {
                                 let r = buf.remaining();
                                 Prioritized {
