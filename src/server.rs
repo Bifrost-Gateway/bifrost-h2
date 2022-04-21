@@ -1056,6 +1056,18 @@ impl<B: Buf> SendResponse<B> {
             .map_err(Into::into)
     }
 
+    ///
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn send_bifrost_call_response(
+        &mut self,
+        data: B,
+    ) -> Result<SendStream<B>, crate::Error> {
+        self.inner
+            .send_bifrost_call_response(data)
+            .map(|_| SendStream::new(self.inner.clone()))
+            .map_err(Into::into)
+    }
+
     /// Push a request and response to the client
     ///
     /// On success, a [`SendResponse`] instance is returned.

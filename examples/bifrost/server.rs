@@ -29,7 +29,7 @@ async fn serve(socket: TcpStream) -> Result<(), Box<dyn Error + Send + Sync>> {
     let (mut connection, mut call_sender) = server::handshake(socket).await?;
     println!("H2 connection bound");
 
-    call_sender.send_bifrost_call(Bytes::from("hello world".to_string())).await;
+    call_sender.send_bifrost_call(Bytes::from("hi there".to_string())).await;
 
     while let Some(result) = connection.accept().await {
         let (request, respond) = result?;

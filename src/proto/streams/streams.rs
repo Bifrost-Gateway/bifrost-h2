@@ -131,10 +131,10 @@ impl<B, P> Streams<B, P>
 
 
     #[cfg(feature = "bifrost-protocol")]
-    pub fn next_bifrost_incoming(&mut self,cx: &mut Context) -> Option<StreamRef<B>> {
+    pub fn next_bifrost_incoming(&mut self, cx: &mut Context) -> Option<StreamRef<B>> {
         let mut me = self.inner.lock().unwrap();
         let me = &mut *me;
-        me.actions.recv.next_bifrost_call_incoming(&mut me.store,cx).map(|key| {
+        me.actions.recv.next_bifrost_call_incoming(&mut me.store, cx).map(|key| {
             let stream = &mut me.store.resolve(key);
             tracing::trace!(
                 "next_incoming; id={:?}, state={:?}",
@@ -231,7 +231,6 @@ impl<B, P> Streams<B, P>
 
     #[cfg(feature = "bifrost-protocol")]
     pub fn send_bifrost_call(&mut self, data: B) -> Result<(), crate::Error> {
-
         let mut me = self.inner.lock().unwrap();
         let me = &mut *me;
 
@@ -258,7 +257,7 @@ impl<B, P> Streams<B, P>
         );
         let mut stream = me.store.insert(stream.id, stream);
 
-        let mut frame = frame::BifrostCall::new(stream_id,data);
+        let mut frame = frame::BifrostCall::new(stream_id, data);
 
         let sent = me.actions.send.send_bifrost_call(
             frame,
@@ -1217,6 +1216,40 @@ impl<B> StreamRef<B> {
 
         me.actions
             .send_reset(stream, reason, Initiator::User, &mut me.counts, send_buffer);
+    }
+
+
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn send_bifrost_call_response(
+        &mut self,
+        data: B,
+    ) -> Result<(), UserError>
+        where B: Buf
+    {
+        let mut me = self.opaque.inner.lock().unwrap();
+        let me = &mut *me;
+
+        let mut stream = me.store.resolve(self.opaque.key);
+        let mut send_buffer = self.send_buffer.inner.lock().unwrap();
+        let send_buffer = &mut *send_buffer;
+        let mut frame = frame::BifrostCall::new(stream.id, data);
+        frame.set_response();
+        let sent = me.actions.send.send_bifrost_call(
+            frame,
+            send_buffer,
+            &mut stream,
+            &mut me.counts,
+            &mut me.actions.task,
+        );
+
+
+        if let Err(err) = sent {
+            stream.unlink();
+            stream.remove();
+            return Err(err.into());
+        }
+
+        Ok(())
     }
 
     pub fn send_response(

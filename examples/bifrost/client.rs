@@ -13,8 +13,9 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let (mut client, h2, mut acceptor) = client::handshake(tcp).await?;
 
     tokio::spawn(async move{
-        let req_byte = acceptor.accept().await;
-        dbg!(req_byte);
+        let (req_byte,_response) = acceptor.accept().await.unwrap().unwrap();
+        let b = String::from_utf8(req_byte.to_vec()).unwrap();
+        dbg!(b);
     });
     println!("sending request");
 

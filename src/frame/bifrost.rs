@@ -18,9 +18,11 @@ pub struct BifrostCall<T = Bytes> {
 #[derive(Copy, Clone, Eq, PartialEq)]
 struct BifrostCallFlags(u8);
 
-const ONE_SHOOT: u8 = 0x1;
-const NORMAL: u8 = 0x8;
-const ALL: u8 = ONE_SHOOT | NORMAL;
+
+const NORMAL: u8 = 0x1;
+const ONE_SHOOT: u8 = 0x2;
+const RESPONSE: u8 = 0x8;
+const ALL: u8 = ONE_SHOOT | NORMAL | RESPONSE;
 
 impl<T> BifrostCall<T> {
     /// Creates a new DATA frame.
@@ -67,6 +69,10 @@ impl<T> BifrostCall<T> {
 
     pub(crate) fn head(&self) -> Head {
         Head::new(Kind::BifrostCall, self.flags.into(), self.stream_id)
+    }
+
+    pub fn set_response(&mut self) {
+        self.flags.set_response();
     }
 
     pub(crate) fn map<F, U>(self, f: F) -> BifrostCall<U>
@@ -142,6 +148,14 @@ impl BifrostCallFlags {
 
     fn is_one_shoot(&self) -> bool {
         self.0 & ONE_SHOOT == ONE_SHOOT
+    }
+
+    fn is_response(&self) -> bool {
+        self.0 & RESPONSE == RESPONSE
+    }
+
+    fn set_response(&mut self) {
+        self.0 |= RESPONSE;
     }
 
     fn set_one_shoot(&mut self) {
