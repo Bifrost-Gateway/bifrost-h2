@@ -3,7 +3,7 @@ use super::store::{self, Entry, Resolve, Store};
 use super::{Buffer, Config, Counts, Prioritized, Recv, Send, Stream, StreamId};
 use crate::codec::{Codec, SendError, UserError};
 use crate::ext::Protocol;
-use crate::frame::{self, Frame, Reason};
+use crate::frame::{self, BifrostCall, Frame, Reason};
 use crate::proto::{peer, Error, Initiator, Open, Peer, WindowSize};
 use crate::{client, proto, server};
 
@@ -126,6 +126,48 @@ impl<B, P> Streams<B, P>
         me.actions
             .recv
             .set_target_connection_window(size, &mut me.actions.task)
+    }
+
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn next_bifrost_call_incoming(&mut self) -> Option<StreamRef<B>> {
+        let mut me = self.inner.lock().unwrap();
+        let me = &mut *me;
+        me.actions.recv.next_incoming(&mut me.store).map(|key| {
+            let stream = &mut me.store.resolve(key);
+            tracing::trace!(
+                "next_incoming; id={:?}, state={:?}",
+                stream.id,
+                stream.state
+            );
+            // TODO: ideally, OpaqueStreamRefs::new would do this, but we're holding
+            // the lock, so it can't.
+            me.refs += 1;
+            StreamRef {
+                opaque: OpaqueStreamRef::new(self.inner.clone(), stream),
+                send_buffer: self.send_buffer.clone(),
+            }
+        })
+    }
+
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn next_bifrost_incoming(&mut self) -> Option<StreamRef<B>> {
+        let mut me = self.inner.lock().unwrap();
+        let me = &mut *me;
+        me.actions.recv.next_bifrost_call_incoming(&mut me.store).map(|key| {
+            let stream = &mut me.store.resolve(key);
+            tracing::trace!(
+                "next_incoming; id={:?}, state={:?}",
+                stream.id,
+                stream.state
+            );
+            // TODO: ideally, OpaqueStreamRefs::new would do this, but we're holding
+            // the lock, so it can't.
+            me.refs += 1;
+            StreamRef {
+                opaque: OpaqueStreamRef::new(self.inner.clone(), stream),
+                send_buffer: self.send_buffer.clone(),
+            }
+        })
     }
 
     pub fn next_incoming(&mut self) -> Option<StreamRef<B>> {
@@ -1231,6 +1273,15 @@ impl<B> StreamRef<B> {
 
         let mut stream = me.store.resolve(self.opaque.key);
         me.actions.recv.take_request(&mut stream)
+    }
+
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn take_bifrost_call(&self) -> Bytes {
+        let mut me = self.opaque.inner.lock().unwrap();
+        let me = &mut *me;
+
+        let mut stream = me.store.resolve(self.opaque.key);
+        me.actions.recv.take_bifrost_call(&mut stream)
     }
 
     /// Called by a client to see if the current stream is pending open

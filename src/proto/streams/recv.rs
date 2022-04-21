@@ -1,6 +1,6 @@
 use super::*;
 use crate::codec::UserError;
-use crate::frame::{self, PushPromiseHeaderError, Reason, DEFAULT_INITIAL_WINDOW_SIZE};
+use crate::frame::{self, PushPromiseHeaderError, Reason, DEFAULT_INITIAL_WINDOW_SIZE, BifrostCall};
 use crate::proto::{self, Error};
 use std::task::Context;
 
@@ -43,6 +43,10 @@ pub(super) struct Recv {
     /// New streams to be accepted
     pending_accept: store::Queue<stream::NextAccept>,
 
+    /// New streams to be accepted
+    #[cfg(feature = "bifrost-protocol")]
+    pending_bifrost_call_accept: store::Queue<stream::NextAccept>,
+
     /// Locally reset streams that should be reaped when they expire
     pending_reset_expired: store::Queue<stream::NextResetExpire>,
 
@@ -80,7 +84,7 @@ pub(crate) enum Open {
     PushPromise,
     Headers,
     #[cfg(feature = "bifrost-protocol")]
-    BifrostCall
+    BifrostCall,
 }
 
 impl Recv {
@@ -104,6 +108,7 @@ impl Recv {
             last_processed_id: StreamId::ZERO,
             max_stream_id: StreamId::MAX,
             pending_accept: store::Queue::new(),
+            pending_bifrost_call_accept: store::Queue::new(),
             pending_reset_expired: store::Queue::new(),
             reset_duration: config.local_reset_duration,
             buffer: Buffer::new(),
@@ -260,6 +265,16 @@ impl Recv {
 
         match stream.pending_recv.pop_front(&mut self.buffer) {
             Some(Event::Headers(Server(request))) => request,
+            _ => panic!(),
+        }
+    }
+
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn take_bifrost_call(&mut self, stream: &mut store::Ptr) -> Bytes {
+        use super::peer::PollMessage::*;
+
+        match stream.pending_bifrost_call_recv.pop_front(&mut self.buffer) {
+            Some(Event::Data(request)) => request,
             _ => panic!(),
         }
     }
@@ -527,10 +542,15 @@ impl Recv {
     }
 
     #[cfg(feature = "bifrost-protocol")]
-    pub fn recv_bifrost_call(&mut self, frame: frame::BifrostCall, stream: &mut store::Ptr) -> Result<(), Error>{
+    pub fn recv_bifrost_call(&mut self, frame: frame::BifrostCall, stream: &mut store::Ptr) -> Result<(), Error> {
         let event = Event::Data(frame.into_payload());
         stream.pending_bifrost_call_recv.push_back(&mut self.buffer, event);
         stream.notify_bifrost_call_recv();
+
+        // Only client can receive a BifrostCall frame that initiates the stream.
+        // already checked!
+        self.pending_bifrost_call_accept.push(stream);
+
         Ok(())
     }
 
@@ -790,7 +810,7 @@ impl Recv {
     pub fn may_have_created_stream(&self, id: StreamId) -> bool {
         if let Ok(next_id) = self.next_stream_id {
             // Peer::is_local_init should have been called beforehand
-            debug_assert_eq!(id.is_server_initiated(), next_id.is_server_initiated(),);
+            debug_assert_eq!(id.is_server_initiated(), next_id.is_server_initiated(), );
             id < next_id
         } else {
             true
@@ -846,9 +866,9 @@ impl Recv {
         cx: &mut Context,
         dst: &mut Codec<T, Prioritized<B>>,
     ) -> Poll<io::Result<()>>
-    where
-        T: AsyncWrite + Unpin,
-        B: Buf,
+        where
+            T: AsyncWrite + Unpin,
+            B: Buf,
     {
         if let Some(stream_id) = self.refused {
             ready!(dst.poll_ready(cx))?;
@@ -923,9 +943,9 @@ impl Recv {
         counts: &mut Counts,
         dst: &mut Codec<T, Prioritized<B>>,
     ) -> Poll<io::Result<()>>
-    where
-        T: AsyncWrite + Unpin,
-        B: Buf,
+        where
+            T: AsyncWrite + Unpin,
+            B: Buf,
     {
         // Send any pending connection level window updates
         ready!(self.send_connection_window_update(cx, dst))?;
@@ -942,9 +962,9 @@ impl Recv {
         cx: &mut Context,
         dst: &mut Codec<T, Prioritized<B>>,
     ) -> Poll<io::Result<()>>
-    where
-        T: AsyncWrite + Unpin,
-        B: Buf,
+        where
+            T: AsyncWrite + Unpin,
+            B: Buf,
     {
         if let Some(incr) = self.flow.unclaimed_capacity() {
             let frame = frame::WindowUpdate::new(StreamId::zero(), incr);
@@ -973,9 +993,9 @@ impl Recv {
         counts: &mut Counts,
         dst: &mut Codec<T, Prioritized<B>>,
     ) -> Poll<io::Result<()>>
-    where
-        T: AsyncWrite + Unpin,
-        B: Buf,
+        where
+            T: AsyncWrite + Unpin,
+            B: Buf,
     {
         loop {
             // Ensure the codec has capacity
@@ -1019,6 +1039,12 @@ impl Recv {
             })
         }
     }
+
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn next_bifrost_call_incoming(&mut self, store: &mut Store) -> Option<store::Key> {
+        self.pending_bifrost_call_accept.pop(store).map(|ptr| ptr.key())
+    }
+
 
     pub fn next_incoming(&mut self, store: &mut Store) -> Option<store::Key> {
         self.pending_accept.pop(store).map(|ptr| ptr.key())

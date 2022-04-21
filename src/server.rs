@@ -267,7 +267,7 @@ pub struct Builder {
 /// [module]: index.html
 #[derive(Debug)]
 pub struct SendResponse<B: Buf> {
-    inner: proto::StreamRef<B>,
+    pub(crate) inner: proto::StreamRef<B>,
 }
 
 /// Send a response to a promised request

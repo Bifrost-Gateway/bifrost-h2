@@ -10,8 +10,12 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let _ = env_logger::try_init();
 
     let tcp = TcpStream::connect("127.0.0.1:5928").await?;
-    let (mut client, h2,acceptor) = client::handshake(tcp).await?;
+    let (mut client, h2, mut acceptor) = client::handshake(tcp).await?;
 
+    tokio::spawn(async move{
+        let req_byte = acceptor.accept().await;
+        dbg!(req_byte);
+    });
     println!("sending request");
 
     let request = Request::builder()

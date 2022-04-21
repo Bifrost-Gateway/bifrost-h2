@@ -64,8 +64,13 @@ tokio-rustls = "0.23.2"
 webpki-roots = "0.22.2"
 
 [[example]]
-name = "server"
-path = "examples/server.rs"
+name = "bifrost-server"
+path = "examples/bifrost/server.rs"
+required-features = ["stream", "bifrost-protocol"]
+
+[[example]]
+name = "bifrost-client"
+path = "examples/bifrost/client.rs"
 required-features = ["stream", "bifrost-protocol"]
 
 [package.metadata.docs.rs]

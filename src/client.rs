@@ -151,6 +151,7 @@ use std::time::Duration;
 use std::usize;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tracing::Instrument;
+use crate::server::SendResponse;
 
 /// Initializes new HTTP/2 streams on a connection by sending a request.
 ///
@@ -176,6 +177,13 @@ use tracing::Instrument;
 pub struct SendRequest<B: Buf> {
     inner: proto::Streams<B, Peer>,
     pending: Option<proto::OpaqueStreamRef>,
+}
+
+///
+#[cfg(feature = "bifrost-protocol")]
+#[derive(Debug)]
+pub struct BifrostCallAcceptor<B: Buf> {
+    inner: proto::Streams<B, Peer>,
 }
 
 /// Returns a `SendRequest` instance once it is ready to send at least one
@@ -340,8 +348,8 @@ pub(crate) struct Peer;
 // ===== impl SendRequest =====
 
 impl<B> SendRequest<B>
-where
-    B: Buf + 'static,
+    where
+        B: Buf + 'static,
 {
     /// Returns `Ready` when the connection can initialize a new HTTP/2
     /// stream.
@@ -537,8 +545,8 @@ where
 }
 
 impl<B> fmt::Debug for SendRequest<B>
-where
-    B: Buf,
+    where
+        B: Buf,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("SendRequest").finish()
@@ -546,8 +554,8 @@ where
 }
 
 impl<B> Clone for SendRequest<B>
-where
-    B: Buf,
+    where
+        B: Buf,
 {
     fn clone(&self) -> Self {
         SendRequest {
@@ -559,8 +567,8 @@ where
 
 #[cfg(feature = "unstable")]
 impl<B> SendRequest<B>
-where
-    B: Buf,
+    where
+        B: Buf,
 {
     /// Returns the number of active streams.
     ///
@@ -583,8 +591,8 @@ where
 // ===== impl ReadySendRequest =====
 
 impl<B> Future for ReadySendRequest<B>
-where
-    B: Buf + 'static,
+    where
+        B: Buf + 'static,
 {
     type Output = Result<SendRequest<B>, crate::Error>;
 
@@ -1097,10 +1105,10 @@ impl Builder {
     pub fn handshake<T, B>(
         &self,
         io: T,
-    ) -> impl Future<Output = Result<(SendRequest<B>, Connection<T, B>), crate::Error>>
-    where
-        T: AsyncRead + AsyncWrite + Unpin,
-        B: Buf + 'static,
+    ) -> impl Future<Output=Result<(SendRequest<B>, Connection<T, B>, BifrostCallAcceptor<B>), crate::Error>>
+        where
+            T: AsyncRead + AsyncWrite + Unpin,
+            B: Buf + 'static,
     {
         Connection::handshake2(io, self.clone())
     }
@@ -1147,9 +1155,9 @@ impl Default for Builder {
 /// #
 /// # pub fn main() {}
 /// ```
-pub async fn handshake<T>(io: T) -> Result<(SendRequest<Bytes>, Connection<T, Bytes>), crate::Error>
-where
-    T: AsyncRead + AsyncWrite + Unpin,
+pub async fn handshake<T>(io: T) -> Result<(SendRequest<Bytes>, Connection<T, Bytes>, BifrostCallAcceptor<Bytes>), crate::Error>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
 {
     let builder = Builder::new();
     builder
@@ -1161,8 +1169,8 @@ where
 // ===== impl Connection =====
 
 async fn bind_connection<T>(io: &mut T) -> Result<(), crate::Error>
-where
-    T: AsyncRead + AsyncWrite + Unpin,
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
 {
     tracing::debug!("binding client connection");
 
@@ -1175,14 +1183,14 @@ where
 }
 
 impl<T, B> Connection<T, B>
-where
-    T: AsyncRead + AsyncWrite + Unpin,
-    B: Buf + 'static,
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+        B: Buf + 'static,
 {
     async fn handshake2(
         mut io: T,
         builder: Builder,
-    ) -> Result<(SendRequest<B>, Connection<T, B>), crate::Error> {
+    ) -> Result<(SendRequest<B>, Connection<T, B>, BifrostCallAcceptor<B>), crate::Error> {
         bind_connection(&mut io).await?;
 
         // Create the codec
@@ -1217,12 +1225,16 @@ where
             pending: None,
         };
 
+        let acceptor = BifrostCallAcceptor {
+            inner: inner.streams().clone()
+        };
+
         let mut connection = Connection { inner };
         if let Some(sz) = builder.initial_target_connection_window_size {
             connection.set_target_window_size(sz);
         }
 
-        Ok((send_request, connection))
+        Ok((send_request, connection, acceptor))
     }
 
     /// Sets the target window size for the whole connection.
@@ -1304,9 +1316,9 @@ where
 }
 
 impl<T, B> Future for Connection<T, B>
-where
-    T: AsyncRead + AsyncWrite + Unpin,
-    B: Buf + 'static,
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+        B: Buf + 'static,
 {
     type Output = Result<(), crate::Error>;
 
@@ -1317,10 +1329,10 @@ where
 }
 
 impl<T, B> fmt::Debug for Connection<T, B>
-where
-    T: AsyncRead + AsyncWrite,
-    T: fmt::Debug,
-    B: fmt::Debug + Buf,
+    where
+        T: AsyncRead + AsyncWrite,
+        T: fmt::Debug,
+        B: fmt::Debug + Buf,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&self.inner, fmt)
@@ -1551,5 +1563,32 @@ impl proto::Peer for Peer {
         *response.headers_mut() = fields;
 
         Ok(response)
+    }
+}
+
+#[cfg(feature = "bifrost-protocol")]
+impl<B: bytes::Buf> BifrostCallAcceptor<B>{
+    /// Accept the next incoming request on this connection.
+    pub async fn accept(
+        &mut self,
+    ) -> Option<Result<(Bytes, SendResponse<B>), crate::Error>> {
+        futures_util::future::poll_fn(move |cx| self.poll_accept(cx)).await
+    }
+
+    #[doc(hidden)]
+    pub fn poll_accept(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<(Bytes, SendResponse<B>), crate::Error>>> {
+        if let Some(inner) = self.inner.next_bifrost_incoming() {
+            tracing::trace!("received incoming");
+            //TODO: trans
+            let bytes = inner.take_bifrost_call();
+            let respond = SendResponse { inner };
+
+            return Poll::Ready(Some(Ok((bytes, respond))));
+        }
+
+        Poll::Pending
     }
 }
