@@ -72,6 +72,7 @@ pub(super) struct Recv {
 pub(super) enum Event {
     Headers(peer::PollMessage),
     Data(Bytes),
+    #[cfg(feature = "bifrost-protocol")]
     BifrostData(frame::BifrostCall),
     Trailers(HeaderMap),
 }
@@ -111,7 +112,9 @@ impl Recv {
             last_processed_id: StreamId::ZERO,
             max_stream_id: StreamId::MAX,
             pending_accept: store::Queue::new(),
+            #[cfg(feature = "bifrost-protocol")]
             pending_bifrost_call_accept: store::Queue::new(),
+            #[cfg(feature = "bifrost-protocol")]
             pending_bifrost_call_task: None,
             pending_reset_expired: store::Queue::new(),
             reset_duration: config.local_reset_duration,
@@ -314,6 +317,7 @@ impl Recv {
     }
 
     /// Called by the server to get the response
+    #[cfg(feature = "bifrost-protocol")]
     pub fn poll_bifrost_response(
         &mut self,
         cx: &Context,

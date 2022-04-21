@@ -10,7 +10,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let _ = env_logger::try_init();
 
     let tcp = TcpStream::connect("127.0.0.1:5928").await?;
-    let (mut client, h2,acceptor) = client::handshake(tcp).await?;
+    let (mut client, h2) = client::handshake(tcp).await?;
 
     println!("sending request");
 

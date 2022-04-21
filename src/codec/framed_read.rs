@@ -329,10 +329,7 @@ fn decode_frame(
             })?
                 .into()
         }
-        #[cfg(feature = "bifrost-protocol")]
-        Kind::BifrostAnswer => {
-            return Ok(None);
-        }
+
         Kind::Unknown => {
             // Unknown frames are ignored
             return Ok(None);

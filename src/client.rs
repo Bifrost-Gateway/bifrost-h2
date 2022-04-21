@@ -151,6 +151,7 @@ use std::time::Duration;
 use std::usize;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tracing::Instrument;
+#[cfg(feature = "bifrost-protocol")]
 use crate::server::SendResponse;
 
 /// Initializes new HTTP/2 streams on a connection by sending a request.
@@ -1102,13 +1103,27 @@ impl Builder {
     /// #
     /// # pub fn main() {}
     /// ```
+    #[cfg(feature = "bifrost-protocol")]
     pub fn handshake<T, B>(
         &self,
         io: T,
     ) -> impl Future<Output=Result<(SendRequest<B>, Connection<T, B>, BifrostCallAcceptor<B>), crate::Error>>
         where
             T: AsyncRead + AsyncWrite + Unpin,
-            B: Buf + 'static,
+            B: Buf + 'static
+    {
+        Connection::handshake2(io, self.clone())
+    }
+
+    #[cfg(not(feature = "bifrost-protocol"))]
+    ///
+    pub fn handshake<T, B>(
+        &self,
+        io: T,
+    ) -> impl Future<Output=Result<(SendRequest<B>, Connection<T, B>), crate::Error>>
+        where
+            T: AsyncRead + AsyncWrite + Unpin,
+            B: Buf + 'static
     {
         Connection::handshake2(io, self.clone())
     }
@@ -1155,7 +1170,21 @@ impl Default for Builder {
 /// #
 /// # pub fn main() {}
 /// ```
+#[cfg(feature = "bifrost-protocol")]
 pub async fn handshake<T>(io: T) -> Result<(SendRequest<Bytes>, Connection<T, Bytes>, BifrostCallAcceptor<Bytes>), crate::Error>
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+{
+    let builder = Builder::new();
+    builder
+        .handshake(io)
+        .instrument(tracing::trace_span!("client_handshake"))
+        .await
+}
+
+///
+#[cfg(not(feature = "bifrost-protocol"))]
+pub async fn handshake<T>(io: T) -> Result<(SendRequest<Bytes>, Connection<T, Bytes>), crate::Error>
     where
         T: AsyncRead + AsyncWrite + Unpin,
 {
@@ -1187,10 +1216,60 @@ impl<T, B> Connection<T, B>
         T: AsyncRead + AsyncWrite + Unpin,
         B: Buf + 'static,
 {
+    #[cfg(not(feature = "bifrost-protocol"))]
     async fn handshake2(
         mut io: T,
         builder: Builder,
-    ) -> Result<(SendRequest<B>, Connection<T, B>, BifrostCallAcceptor<B>), crate::Error> {
+    ) -> Result<(SendRequest<B>, Connection<T, B>), crate::Error> {
+        bind_connection(&mut io).await?;
+
+        // Create the codec
+        let mut codec = Codec::new(io);
+
+        if let Some(max) = builder.settings.max_frame_size() {
+            codec.set_max_recv_frame_size(max as usize);
+        }
+
+        if let Some(max) = builder.settings.max_header_list_size() {
+            codec.set_max_recv_header_list_size(max as usize);
+        }
+
+        // Send initial settings frame
+        codec
+            .buffer(builder.settings.clone().into())
+            .expect("invalid SETTINGS frame");
+
+        let inner = proto::Connection::new(
+            codec,
+            proto::Config {
+                next_stream_id: builder.stream_id,
+                initial_max_send_streams: builder.initial_max_send_streams,
+                max_send_buffer_size: builder.max_send_buffer_size,
+                reset_stream_duration: builder.reset_stream_duration,
+                reset_stream_max: builder.reset_stream_max,
+                settings: builder.settings.clone(),
+            },
+        );
+        let send_request = SendRequest {
+            inner: inner.streams().clone(),
+            pending: None,
+        };
+
+
+
+        let mut connection = Connection { inner };
+        if let Some(sz) = builder.initial_target_connection_window_size {
+            connection.set_target_window_size(sz);
+        }
+
+        Ok((send_request, connection))
+    }
+
+    #[cfg(feature = "bifrost-protocol")]
+    async fn handshake2(
+        mut io: T,
+        builder: Builder,
+    ) -> Result<(SendRequest<B>, Connection<T, B>,BifrostCallAcceptor<B>), crate::Error> {
         bind_connection(&mut io).await?;
 
         // Create the codec

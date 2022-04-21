@@ -40,6 +40,7 @@ struct Encoder<B> {
     next: Option<Next<B>>,
 
     /// Last bifrost call frame
+    #[cfg(feature = "bifrost-protocol")]
     last_bifrost_call_frame: Option<frame::BifrostCall<B>>,
 
     /// Last data frame
@@ -86,6 +87,7 @@ impl<T, B> FramedWrite<T, B>
                 hpack: hpack::Encoder::default(),
                 buf: Cursor::new(BytesMut::with_capacity(DEFAULT_BUFFER_CAPACITY)),
                 next: None,
+                #[cfg(feature = "bifrost-protocol")]
                 last_bifrost_call_frame: None,
                 last_data_frame: None,
                 max_frame_size: frame::DEFAULT_MAX_FRAME_SIZE,
@@ -236,6 +238,7 @@ impl<B> Encoder<B>
         tracing::debug!(frame = ?item, "send");
 
         match item {
+            #[cfg(feature = "bifrost-protocol")]
             Frame::BifrostCall(mut v) => {
                 // Ensure that the payload is not greater than the max frame.
                 let len = v.payload().remaining();

@@ -73,5 +73,15 @@ name = "bifrost-client"
 path = "examples/bifrost/client.rs"
 required-features = ["stream", "bifrost-protocol"]
 
+[[example]]
+name = "server"
+path = "examples/server.rs"
+required-features = ["stream", "bifrost-protocol"]
+
+[[example]]
+name = "client"
+path = "examples/client.rs"
+required-features = ["stream", "bifrost-protocol"]
+
 [package.metadata.docs.rs]
 features = ["stream", "bifrost-protocol"]

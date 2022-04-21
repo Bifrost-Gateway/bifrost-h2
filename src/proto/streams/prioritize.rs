@@ -532,6 +532,7 @@ impl Prioritize {
                         self.in_flight_data_frame = InFlightData::DataFrame(frame.payload().stream);
                     }
 
+                    #[cfg(feature = "bifrost-protocol")]
                     if let Frame::BifrostCall(_) = frame{
                         dst.buffer(frame).expect("invalid frame");
 
@@ -722,6 +723,7 @@ impl Prioritize {
                     tracing::trace!(is_pending_reset);
 
                     let frame = match stream.pending_send.pop_front(buffer) {
+                        #[cfg(feature = "bifrost-protocol")]
                         Some(Frame::BifrostCall(frame)) => {
                             Frame::BifrostCall(frame.map(|buf| {
                                 let r = buf.remaining();

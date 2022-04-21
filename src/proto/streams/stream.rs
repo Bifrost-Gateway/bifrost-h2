@@ -191,8 +191,10 @@ impl Stream {
             reset_at: None,
             next_reset_expire: None,
             pending_recv: buffer::Deque::new(),
+            #[cfg(feature = "bifrost-protocol")]
             pending_bifrost_call_recv: buffer::Deque::new(),
             recv_task: None,
+            #[cfg(feature = "bifrost-protocol")]
             bifrost_call_recv_task: None,
             pending_push_promises: store::Queue::new(),
             content_length: ContentLength::Omitted,

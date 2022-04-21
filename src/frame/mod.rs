@@ -101,6 +101,7 @@ impl<T> Frame<T> {
             GoAway(frame) => frame.into(),
             WindowUpdate(frame) => frame.into(),
             Reset(frame) => frame.into(),
+            #[cfg(feature = "bifrost-protocol")]
             BifrostCall(frame) => frame.map(f).into()
         }
     }
@@ -120,6 +121,7 @@ impl<T> fmt::Debug for Frame<T> {
             GoAway(ref frame) => fmt::Debug::fmt(frame, fmt),
             WindowUpdate(ref frame) => fmt::Debug::fmt(frame, fmt),
             Reset(ref frame) => fmt::Debug::fmt(frame, fmt),
+            #[cfg(feature = "bifrost-protocol")]
             BifrostCall(ref frame) => fmt::Debug::fmt(frame,fmt)
         }
     }

@@ -81,6 +81,7 @@ impl Dyn {
 
             Ok(())
         } else {
+            #[cfg(feature = "bifrost-protocol")]
             if mode.is_bifrost_call(){
                 return Ok(());
             }

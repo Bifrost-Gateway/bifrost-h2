@@ -26,7 +26,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 }
 
 async fn serve(socket: TcpStream) -> Result<(), Box<dyn Error + Send + Sync>> {
+    #[cfg(not(feature = "bifrost-protocol"))]
     let mut connection = server::handshake(socket).await?;
+
+    #[cfg(feature = "bifrost-protocol")]
+    let  (mut connection,_call_sender) = server::handshake(socket).await?;
     println!("H2 connection bound");
 
     while let Some(result) = connection.accept().await {

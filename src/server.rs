@@ -1291,7 +1291,11 @@ impl<T, B: Buf> Future for Handshake<T, B>
         T: AsyncRead + AsyncWrite + Unpin,
         B: Buf + 'static,
 {
+    #[cfg(feature = "bifrost-protocol")]
     type Output = Result<(Connection<T, B>, BifrostCallSender<B>), crate::Error>;
+
+    #[cfg(not(feature = "bifrost-protocol"))]
+    type Output = Result<Connection<T, B>, crate::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let span = self.span.clone(); // XXX(eliza): T_T
@@ -1336,15 +1340,22 @@ impl<T, B: Buf> Future for Handshake<T, B>
                         },
                     );
 
+                    #[cfg(feature = "bifrost-protocol")]
                     let stream_cloned = connection.streams().clone();
+                    #[cfg(feature = "bifrost-protocol")]
                     let bifrost_call_sender = BifrostCallSender { inner: stream_cloned };
+
                     tracing::trace!("connection established!");
                     let mut c = Connection { connection };
                     if let Some(sz) = self.builder.initial_target_connection_window_size {
                         c.set_target_window_size(sz);
                     }
 
+                    #[cfg(feature = "bifrost-protocol")]
                     return Poll::Ready(Ok((c, bifrost_call_sender)));
+
+                    #[cfg(not(feature = "bifrost-protocol"))]
+                    return Poll::Ready(Ok(c));
                 }
                 Handshaking::Done => {
                     panic!("Handshaking::poll() called again after handshaking was complete")
