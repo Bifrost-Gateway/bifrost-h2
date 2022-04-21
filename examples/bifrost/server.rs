@@ -28,20 +28,21 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 async fn serve(socket: TcpStream) -> Result<(), Box<dyn Error + Send + Sync>> {
     let (mut connection, mut call_sender) = server::handshake(socket).await?;
     println!("H2 connection bound");
-
-    let response = call_sender.send_bifrost_call(Bytes::from("hi there".to_string())).await.unwrap();
+    tokio::spawn(async move {
+        while let Some(result) = connection.accept().await {
+            let (request, respond) = result.unwrap();
+            tokio::spawn(async move {
+                if let Err(e) = handle_request(request, respond).await {
+                    println!("error while handling request: {}", e);
+                }
+            });
+        }
+    });
+    let response = call_sender.send_bifrost_call(Bytes::from("hi there".to_string()), false).await.unwrap().unwrap();
     let r = response.await.unwrap();
     let s = String::from_utf8(r.to_vec()).unwrap();
     println!("{}", s);
 
-    while let Some(result) = connection.accept().await {
-        let (request, respond) = result?;
-        tokio::spawn(async move {
-            if let Err(e) = handle_request(request, respond).await {
-                println!("error while handling request: {}", e);
-            }
-        });
-    }
 
     println!("~~~~~~~~~~~ H2 connection CLOSE !!!!!! ~~~~~~~~~~~");
     Ok(())

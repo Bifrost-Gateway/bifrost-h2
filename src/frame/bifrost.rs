@@ -75,6 +75,14 @@ impl<T> BifrostCall<T> {
         self.flags.is_response()
     }
 
+    pub fn set_one_shoot(&mut self){
+        self.flags.set_one_shoot();
+    }
+
+    pub fn set_normal(&mut self){
+        self.flags.set_normal();
+    }
+
     pub fn set_response(&mut self) {
         self.flags.set_response();
     }

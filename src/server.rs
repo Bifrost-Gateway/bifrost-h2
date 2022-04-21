@@ -1569,8 +1569,16 @@ impl proto::Peer for Peer {
 #[cfg(feature = "bifrost-protocol")]
 impl BifrostCallSender<Bytes> {
     ///
-    pub async fn send_bifrost_call(&mut self, data: Bytes) -> Result<BifrostResponseFuture, crate::Error> {
-        self.inner.send_bifrost_call(data)
+    pub async fn send_bifrost_call(&mut self, data: Bytes, one_shoot: bool) -> Result<Option<BifrostResponseFuture>, crate::Error> {
+        self.inner.send_bifrost_call(data, one_shoot).map(|stream_ref| {
+            if let Some(r) = stream_ref {
+                Ok(Some(BifrostResponseFuture {
+                    inner: r.clone_to_opaque(),
+                }))
+            } else {
+                Ok(None)
+            }
+        }).unwrap()
     }
 }
 

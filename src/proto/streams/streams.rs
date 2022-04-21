@@ -232,11 +232,11 @@ impl<B, P> Streams<B, P>
     }
 
     #[cfg(feature = "bifrost-protocol")]
-    pub fn send_bifrost_call(&mut self, data: B) -> Result<BifrostResponseFuture, crate::Error>
+    pub fn send_bifrost_call(&mut self, data: B, one_shoot: bool) -> Result<Option<StreamRef<B>>, crate::Error>
         where B: Buf + 'static
     {
-        let mut me = self.inner.lock().unwrap();
-        let me = &mut *me;
+        let mut ground_me = self.inner.lock().unwrap();
+        let me = &mut *ground_me;
 
         let mut send_buffer = self.send_buffer.inner.lock().unwrap();
         let send_buffer = &mut *send_buffer;
@@ -265,6 +265,12 @@ impl<B, P> Streams<B, P>
 
         let mut frame = frame::BifrostCall::new(stream_id, data);
 
+        if one_shoot {
+            frame.set_one_shoot();
+        } else {
+            frame.set_normal();
+        }
+
         let sent = me.actions.send.send_bifrost_call(
             frame,
             send_buffer,
@@ -289,17 +295,16 @@ impl<B, P> Streams<B, P>
         me.refs += 1;
 
 
-        let stream_ref = StreamRef {
-            opaque: OpaqueStreamRef::new(self.inner.clone(), &mut stream),
-            send_buffer: self.send_buffer.clone(),
-        };
+        if one_shoot {
+            return Ok(None);
+        } else {
+            let stream_ref = StreamRef {
+                opaque: OpaqueStreamRef::new(self.inner.clone(), &mut stream),
+                send_buffer: self.send_buffer.clone(),
+            };
 
-        let response = BifrostResponseFuture {
-            inner: stream_ref.clone_to_opaque(),
-        };
-
-
-        Ok(response)
+            Ok(Some(stream_ref))
+        }
     }
 
 

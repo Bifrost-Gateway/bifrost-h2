@@ -14,11 +14,12 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let (mut client, h2, mut acceptor) = client::handshake(tcp).await?;
 
     tokio::spawn(async move {
-        let (req_byte, mut response) = acceptor.accept().await.unwrap().unwrap();
-        let b = String::from_utf8(req_byte.to_vec()).unwrap();
-        dbg!(b);
-
-        response.send_bifrost_call_response(Bytes::from_static(b"hi, wtf response"));
+        while let Some(result) = acceptor.accept().await {
+            let (recv, mut respond) = result.unwrap();
+            let b = String::from_utf8(recv.to_vec()).unwrap();
+            dbg!(b);
+            respond.send_bifrost_call_response(Bytes::from_static(b"hi, wtf response"));
+        }
     });
     println!("sending request");
 
