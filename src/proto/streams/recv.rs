@@ -47,6 +47,9 @@ pub(super) struct Recv {
     #[cfg(feature = "bifrost-protocol")]
     pending_bifrost_call_accept: store::Queue<stream::NextAccept>,
 
+    #[cfg(feature = "bifrost-protocol")]
+    pending_bifrost_call_task: Option<Waker>,
+
     /// Locally reset streams that should be reaped when they expire
     pending_reset_expired: store::Queue<stream::NextResetExpire>,
 
@@ -109,6 +112,7 @@ impl Recv {
             max_stream_id: StreamId::MAX,
             pending_accept: store::Queue::new(),
             pending_bifrost_call_accept: store::Queue::new(),
+            pending_bifrost_call_task: None,
             pending_reset_expired: store::Queue::new(),
             reset_duration: config.local_reset_duration,
             buffer: Buffer::new(),
@@ -550,7 +554,9 @@ impl Recv {
         // Only client can receive a BifrostCall frame that initiates the stream.
         // already checked!
         self.pending_bifrost_call_accept.push(stream);
-
+        if let Some(task) = self.pending_bifrost_call_task.take() {
+            task.wake();
+        }
         Ok(())
     }
 
@@ -1041,8 +1047,13 @@ impl Recv {
     }
 
     #[cfg(feature = "bifrost-protocol")]
-    pub fn next_bifrost_call_incoming(&mut self, store: &mut Store) -> Option<store::Key> {
-        self.pending_bifrost_call_accept.pop(store).map(|ptr| ptr.key())
+    pub fn next_bifrost_call_incoming(&mut self, store: &mut Store, cx: &mut Context) -> Option<store::Key> {
+        if let Some(key) = self.pending_bifrost_call_accept.pop(store).map(|ptr| ptr.key()) {
+            Some(key)
+        } else {
+            self.pending_bifrost_call_task = Some(cx.waker().clone());
+            None
+        }
     }
 
 
@@ -1120,6 +1131,16 @@ impl Open {
 
         match *self {
             PushPromise => true,
+            _ => false,
+        }
+    }
+
+    #[cfg(feature = "bifrost-protocol")]
+    pub fn is_bifrost_call(&self) -> bool {
+        use self::Open::*;
+
+        match *self {
+            BifrostCall => true,
             _ => false,
         }
     }

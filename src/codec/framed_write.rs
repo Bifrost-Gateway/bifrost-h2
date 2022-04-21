@@ -39,6 +39,9 @@ struct Encoder<B> {
     /// Next frame to encode
     next: Option<Next<B>>,
 
+    /// Last bifrost call frame
+    last_bifrost_call_frame: Option<frame::BifrostCall<B>>,
+
     /// Last data frame
     last_data_frame: Option<frame::Data<B>>,
 
@@ -71,9 +74,9 @@ const CHAIN_THRESHOLD: usize = 256;
 
 // TODO: Make generic
 impl<T, B> FramedWrite<T, B>
-where
-    T: AsyncWrite + Unpin,
-    B: Buf,
+    where
+        T: AsyncWrite + Unpin,
+        B: Buf,
 {
     pub fn new(inner: T) -> FramedWrite<T, B> {
         let is_write_vectored = inner.is_write_vectored();
@@ -83,6 +86,7 @@ where
                 hpack: hpack::Encoder::default(),
                 buf: Cursor::new(BytesMut::with_capacity(DEFAULT_BUFFER_CAPACITY)),
                 next: None,
+                last_bifrost_call_frame: None,
                 last_data_frame: None,
                 max_frame_size: frame::DEFAULT_MAX_FRAME_SIZE,
                 is_write_vectored,
@@ -171,9 +175,9 @@ fn write<T, B>(
     buf: &mut B,
     cx: &mut Context<'_>,
 ) -> Poll<io::Result<()>>
-where
-    T: AsyncWrite + Unpin,
-    B: Buf,
+    where
+        T: AsyncWrite + Unpin,
+        B: Buf,
 {
     // TODO(eliza): when tokio-util 0.5.1 is released, this
     // could just use `poll_write_buf`...
@@ -196,8 +200,8 @@ enum ControlFlow {
 }
 
 impl<B> Encoder<B>
-where
-    B: Buf,
+    where
+        B: Buf,
 {
     fn unset_frame(&mut self) -> ControlFlow {
         // Clear internal buffer
@@ -232,7 +236,7 @@ where
         tracing::debug!(frame = ?item, "send");
 
         match item {
-            Frame::BifrostCall(mut v) =>{
+            Frame::BifrostCall(mut v) => {
                 // Ensure that the payload is not greater than the max frame.
                 let len = v.payload().remaining();
 
@@ -244,6 +248,8 @@ where
                 // The chunk has been fully encoded, so there is no need to
                 // keep it around
                 assert_eq!(v.payload().remaining(), 0, "chunk not fully encoded");
+
+                self.last_bifrost_call_frame = Some(v);
             }
             Frame::Data(mut v) => {
                 // Ensure that the payload is not greater than the max frame.

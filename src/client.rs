@@ -1580,7 +1580,7 @@ impl<B: bytes::Buf> BifrostCallAcceptor<B>{
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<(Bytes, SendResponse<B>), crate::Error>>> {
-        if let Some(inner) = self.inner.next_bifrost_incoming() {
+        if let Some(inner) = self.inner.next_bifrost_incoming(cx) {
             tracing::trace!("received incoming");
             //TODO: trans
             let bytes = inner.take_bifrost_call();

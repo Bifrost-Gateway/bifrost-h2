@@ -532,6 +532,15 @@ impl Prioritize {
                     if let Frame::Data(ref frame) = frame {
                         self.in_flight_data_frame = InFlightData::DataFrame(frame.payload().stream);
                     }
+
+                    if let Frame::BifrostCall(_) = frame{
+                        dst.buffer(frame).expect("invalid frame");
+
+                        ready!(dst.flush(cx))?;
+                        self.reclaim_frame(buffer, store, dst);
+                        return Poll::Ready(Ok(()));
+                    }
+
                     dst.buffer(frame).expect("invalid frame");
 
                     // Ensure the codec is ready to try the loop again.
@@ -540,6 +549,7 @@ impl Prioritize {
                     // Because, always try to reclaim...
                     self.reclaim_frame(buffer, store, dst);
                 }
+
                 None => {
                     // Try to flush the codec.
                     ready!(dst.flush(cx))?;

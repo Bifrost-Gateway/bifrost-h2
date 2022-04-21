@@ -81,6 +81,9 @@ impl Dyn {
 
             Ok(())
         } else {
+            if mode.is_bifrost_call(){
+                return Ok(());
+            }
             // Ensure that the ID is a valid server initiated ID
             if !mode.is_push_promise() || !id.is_server_initiated() {
                 proto_err!(conn: "cannot open stream {:?} - not server initiated", id);

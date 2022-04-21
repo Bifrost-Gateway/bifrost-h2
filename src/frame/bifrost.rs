@@ -66,7 +66,7 @@ impl<T> BifrostCall<T> {
     }
 
     pub(crate) fn head(&self) -> Head {
-        Head::new(Kind::Data, self.flags.into(), self.stream_id)
+        Head::new(Kind::BifrostCall, self.flags.into(), self.stream_id)
     }
 
     pub(crate) fn map<F, U>(self, f: F) -> BifrostCall<U>

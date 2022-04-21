@@ -129,32 +129,12 @@ impl<B, P> Streams<B, P>
             .set_target_connection_window(size, &mut me.actions.task)
     }
 
-    #[cfg(feature = "bifrost-protocol")]
-    pub fn next_bifrost_call_incoming(&mut self) -> Option<StreamRef<B>> {
-        let mut me = self.inner.lock().unwrap();
-        let me = &mut *me;
-        me.actions.recv.next_incoming(&mut me.store).map(|key| {
-            let stream = &mut me.store.resolve(key);
-            tracing::trace!(
-                "next_incoming; id={:?}, state={:?}",
-                stream.id,
-                stream.state
-            );
-            // TODO: ideally, OpaqueStreamRefs::new would do this, but we're holding
-            // the lock, so it can't.
-            me.refs += 1;
-            StreamRef {
-                opaque: OpaqueStreamRef::new(self.inner.clone(), stream),
-                send_buffer: self.send_buffer.clone(),
-            }
-        })
-    }
 
     #[cfg(feature = "bifrost-protocol")]
-    pub fn next_bifrost_incoming(&mut self) -> Option<StreamRef<B>> {
+    pub fn next_bifrost_incoming(&mut self,cx: &mut Context) -> Option<StreamRef<B>> {
         let mut me = self.inner.lock().unwrap();
         let me = &mut *me;
-        me.actions.recv.next_bifrost_call_incoming(&mut me.store).map(|key| {
+        me.actions.recv.next_bifrost_call_incoming(&mut me.store,cx).map(|key| {
             let stream = &mut me.store.resolve(key);
             tracing::trace!(
                 "next_incoming; id={:?}, state={:?}",
