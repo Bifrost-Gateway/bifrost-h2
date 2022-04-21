@@ -38,10 +38,13 @@ async fn serve(socket: TcpStream) -> Result<(), Box<dyn Error + Send + Sync>> {
             });
         }
     });
-    let response = call_sender.send_bifrost_call(Bytes::from("hi there".to_string()), false).await.unwrap().unwrap();
-    let r = response.await.unwrap();
-    let s = String::from_utf8(r.to_vec()).unwrap();
-    println!("{}", s);
+    for _i in 0..100 {
+        let response = call_sender.send_bifrost_call(Bytes::from("hi there".to_string()), false).await.unwrap().unwrap();
+        let r = response.await.unwrap();
+        let s = String::from_utf8(r.to_vec()).unwrap();
+        println!("{}", s);
+    }
+
 
 
     println!("~~~~~~~~~~~ H2 connection CLOSE !!!!!! ~~~~~~~~~~~");

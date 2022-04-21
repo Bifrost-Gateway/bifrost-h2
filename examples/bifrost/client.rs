@@ -13,7 +13,7 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
     let tcp = TcpStream::connect("127.0.0.1:5928").await?;
     let (mut client, h2, mut acceptor) = client::handshake(tcp).await?;
 
-    tokio::spawn(async move {
+    let job = tokio::spawn(async move {
         while let Some(result) = acceptor.accept().await {
             let (recv, mut respond) = result.unwrap();
             let b = String::from_utf8(recv.to_vec()).unwrap();
@@ -57,5 +57,6 @@ pub async fn main() -> Result<(), Box<dyn Error>> {
         println!("GOT TRAILERS: {:?}", trailers);
     }
 
+    job.await;
     Ok(())
 }
