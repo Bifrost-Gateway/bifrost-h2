@@ -81,6 +81,7 @@ mod test {
     use std::rc::Rc;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicI64, Ordering};
+    use bytes::Bytes;
     use http::Request;
     use tokio::net::TcpStream;
     use h2::client;
@@ -91,11 +92,16 @@ mod test {
         let cnt: AtomicI64 = AtomicI64::new(0);
 
         let _ = env_logger::try_init();
-        let tcp = Rc::new(TcpStream::connect("127.0.0.1:5928").await?);
+        // let tcp = Rc::new(TcpStream::connect("127.0.0.1:5928").await?);
 
-        let mut connections = Arc::new(Vec::new());
+        let mut connections = Vec::new();
         for i in 0..10 {
-            let (mut client, h2, mut acceptor) = client::handshake(*Rc::clone(&tcp)).await?;
+
+            //handshake要求获得：所有权
+            let conn = TcpStream::connect("127.0.0.1:5928").await.unwrap();
+
+            let (mut client, h2, mut acceptor) = client::handshake(conn).await.unwrap();
+
             connections.push((client, h2, acceptor));
         }
 
@@ -105,14 +111,24 @@ mod test {
             .unwrap());
 
         for i in 0..100000 {
-            tokio::spawn(async move {
-                let cnt = usize::try_from(cnt.fetch_add(1, Ordering::Relaxed) % 10).unwrap();
-                let conns = Arc::clone(&connections);
+            let request = Request::builder()
+                .uri("https://baidu.com/").body(()).unwrap();
+            //send request要求获得：所有权。所以反过来，让request喂给sender，这里可以随机某个connection
+            let (future, mut stream) = connections[0].0.send_request(request, true).unwrap();
+            stream.send_data(Bytes::from_static(b"123123123"),true);
 
-                let (client, h2, acceptor) = *conns[cnt];
-                let (response, mut stream) = client.send_request(Arc::clone(&request), true).unwrap();
-                let response = response.await?.into_body();
-                println!("get response{}", response)
+            //异步的去等结果
+            tokio::spawn(async move {
+                // let cnt = usize::try_from(cnt.fetch_add(1, Ordering::Relaxed) % 10).unwrap();
+                // let conns = Arc::clone(&connections);
+                //
+                // let (client, h2, acceptor) = *conns[cnt];
+                // let (response, mut stream) = client.send_request(Arc::clone(&request), true).unwrap();
+
+                // let response = response.await?.into_body();
+                let x = future.await;
+                dbg!(x);
+                // println!("get response{}", response)
             });
         }
     }
