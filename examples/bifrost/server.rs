@@ -41,23 +41,23 @@ async fn serve(socket: TcpStream) -> Result<(), Box<dyn Error + Send + Sync>> {
         }
     });
 
-    //for send NORMAL bifrost request
-    tokio::spawn(async move {
-        for _i in 0..10 {
-            let response = call_sender.send_bifrost_call(Bytes::from(_i.to_string()), false).await.unwrap().unwrap();
-            println!(">>>> send(NORMAL): {}", _i.to_string());
-            let r = response.await.unwrap();
-            let s = String::from_utf8(r.to_vec()).unwrap();
-            println!("<<<< recv {}", s);
-        }
-
-        for _i in 10..20 {
-            if let None = call_sender.send_bifrost_call(Bytes::from(_i.to_string()), true).await.unwrap() {
-                println!(">>>> send(ONE_SHOOT): {}", _i.to_string());
-            }
-        }
-    });
-
+    // //for send NORMAL bifrost request
+    // tokio::spawn(async move {
+    //     for _i in 0..10 {
+    //         let response = call_sender.send_bifrost_call(Bytes::from(_i.to_string()), false).await.unwrap().unwrap();
+    //         println!(">>>> send(NORMAL): {}", _i.to_string());
+    //         let r = response.await.unwrap();
+    //         let s = String::from_utf8(r.to_vec()).unwrap();
+    //         println!("<<<< recv {}", s);
+    //     }
+    //
+    //     for _i in 10..20 {
+    //         if let None = call_sender.send_bifrost_call(Bytes::from(_i.to_string()), true).await.unwrap() {
+    //             println!(">>>> send(ONE_SHOOT): {}", _i.to_string());
+    //         }
+    //     }
+    // });
+    //
 
     Ok(())
 }

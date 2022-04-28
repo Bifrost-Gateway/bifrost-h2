@@ -80,8 +80,9 @@ mod test {
     use std::convert::TryFrom;
     use std::rc::Rc;
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicI64, Ordering};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use bytes::Bytes;
+    use futures_util::future::join_all;
     use http::Request;
     use tokio::net::TcpStream;
     use h2::client;
@@ -89,12 +90,12 @@ mod test {
 
     #[tokio::test]
     async fn test_client() {
-        let cnt: AtomicI64 = AtomicI64::new(0);
+        let cnt: AtomicUsize = AtomicUsize::new(0);
 
         let _ = env_logger::try_init();
         // let tcp = Rc::new(TcpStream::connect("127.0.0.1:5928").await?);
 
-        let mut connections = Vec::new();
+        let mut clients = Vec::new();
         for i in 0..10 {
 
             //handshake要求获得：所有权
@@ -102,34 +103,27 @@ mod test {
 
             let (mut client, h2, mut acceptor) = client::handshake(conn).await.unwrap();
 
-            connections.push((client, h2, acceptor));
+            clients.push((client, h2, acceptor));
         }
 
-        let request = Arc::new(Request::builder()
-            .uri("https://baidu.com/")
-            .body(String::from("123123123"))
-            .unwrap());
+        let mut jobs = Vec::new();
 
-        for i in 0..100000 {
+        for i in 0..10 {
             let request = Request::builder()
-                .uri("https://baidu.com/").body(()).unwrap();
-            //send request要求获得：所有权。所以反过来，让request喂给sender，这里可以随机某个connection
-            let (future, mut stream) = connections[0].0.send_request(request, true).unwrap();
-            stream.send_data(Bytes::from_static(b"123123123"),true);
-
-            //异步的去等结果
-            tokio::spawn(async move {
-                // let cnt = usize::try_from(cnt.fetch_add(1, Ordering::Relaxed) % 10).unwrap();
-                // let conns = Arc::clone(&connections);
-                //
-                // let (client, h2, acceptor) = *conns[cnt];
-                // let (response, mut stream) = client.send_request(Arc::clone(&request), true).unwrap();
-
-                // let response = response.await?.into_body();
+                .uri("https://baidu.com/")
+                .body(())
+                .unwrap();
+            let c = cnt.fetch_add(1, Ordering::Relaxed);
+            let  (client, h2, acceptor) = &mut clients[c % 10];
+            let (future, mut stream) = client.send_request(request, false).unwrap();
+            stream.send_data(Bytes::from_static(b"123"), true);
+            let job = tokio::spawn(async move {
                 let x = future.await;
                 dbg!(x);
                 // println!("get response{}", response)
             });
+            jobs.push(job)
         }
+        join_all(jobs).await;
     }
 }
