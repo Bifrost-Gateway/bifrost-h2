@@ -103,7 +103,16 @@ mod test {
 
             let (mut client, h2, mut acceptor) = client::handshake(conn).await.unwrap();
 
-            clients.push((client, h2, acceptor));
+
+            /// Connection<TcpStream> 是一个驱动器，你可以理解为Netty的EventLoop的协程版本，你需要为他创建一个task并运行起来。
+            /// 它会负责出入。
+            ///
+            /// 注意观察，不同对象所有权被不同东西捕获了。
+            tokio::spawn(async move{
+                let _ = h2.await;
+            });
+
+            clients.push((client, acceptor));
         }
 
         let mut jobs = Vec::new();
@@ -114,7 +123,9 @@ mod test {
                 .body(())
                 .unwrap();
             let c = cnt.fetch_add(1, Ordering::Relaxed);
-            let  (client, h2, acceptor) = &mut clients[c % 10];
+            let  (client, acceptor) = &mut clients[c % 10];
+
+
             let (future, mut stream) = client.send_request(request, false).unwrap();
             stream.send_data(Bytes::from_static(b"123"), true);
             let job = tokio::spawn(async move {
